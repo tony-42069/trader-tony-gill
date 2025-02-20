@@ -1,128 +1,123 @@
 # TraderTony - Solana Trading Bot
 
-A Telegram-based trading bot for Solana tokens, built with TypeScript and the Gill framework.
+A Telegram-based trading bot for Solana tokens with advanced monitoring and sniping capabilities.
 
 ## Features
 
-- 🤖 Telegram Bot Interface
-- 💰 Secure Wallet Management
-- 📊 Real-time Balance Monitoring
-- 🔄 Automated Trading
-- 📈 Price & Liquidity Tracking
-- ⚡ Sniper Functionality
-- 🛡️ Risk Management
-- 📝 Comprehensive Logging
+- 💰 **Wallet Management**
+  - Balance checking
+  - Transaction history
+  - Address management
+  - Real-time monitoring
 
-## Tech Stack
+- 🎯 **Trading Features**
+  - Token sniping
+  - Custom trade parameters
+  - Anti-MEV protection
+  - Priority fees support
 
-- TypeScript
-- Node.js
-- Gill (Solana Web3 Framework)
-- Solana Web3.js
-- Node-Telegram-Bot-API
-- Winston Logger
+- 📊 **Monitoring**
+  - Price tracking
+  - Liquidity monitoring
+  - Volume analysis
+  - Custom alerts
+
+- ⚙️ **Advanced Settings**
+  - Risk management
+  - Trading parameters
+  - Network configuration
+  - Performance tuning
 
 ## Prerequisites
 
-- Node.js 16+
-- pnpm
-- Solana CLI (optional)
-- Telegram Bot Token
-- Solana RPC URL
+- Node.js v18 or higher
+- pnpm package manager
+- Solana wallet with SOL for transactions
+- Telegram Bot Token (from @BotFather)
 
 ## Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/tony-42069/trader-tony-gill.git
-   cd trader-tony-gill
-   ```
+```bash
+git clone https://github.com/tony-42069/trader-tony-gill.git
+cd trader-tony-gill
+```
 
 2. Install dependencies:
-   ```bash
-   pnpm install
-   ```
+```bash
+pnpm install
+```
 
-3. Create environment file:
-   ```bash
-   cp .env.example .env
-   ```
+3. Configure environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your values:
+# - TELEGRAM_BOT_TOKEN: Your Telegram bot token
+# - ADMIN_CHAT_ID: Your Telegram chat ID
+# - SOLANA_RPC_URL: Your Solana RPC endpoint
+# - WALLET_SEED_PHRASE: Your wallet seed phrase
+```
 
-4. Configure environment variables:
-   ```env
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   ADMIN_CHAT_ID=your_chat_id_here
-   SOLANA_RPC_URL=your_rpc_url_here
-   WALLET_ID=your_wallet_id_here
-   WALLET_SEED_PHRASE=your_seed_phrase_here
-   ```
+4. Build the project:
+```bash
+pnpm build
+```
 
-## Configuration
-
-The bot can be configured through various settings files:
-
-- `src/config/settings.ts`: Main configuration
-- `src/config/types.ts`: TypeScript interfaces
-- `src/config/validation.ts`: Configuration validation
-
-Key configuration options:
-```typescript
-{
-  trading: {
-    maxSlippage: 1.0,         // Maximum slippage percentage
-    minLiquidity: 1000,       // Minimum liquidity in USD
-    takeProfit: 50.0,         // Take profit percentage
-    stopLoss: 20.0,           // Stop loss percentage
-    priorityFee: 0.0001       // Priority fee in SOL
-  },
-  risk: {
-    maxRiskScore: 70,         // Maximum acceptable risk score
-    minHolders: 10,           // Minimum number of holders
-    maxBuyTax: 10.0,          // Maximum acceptable buy tax
-    maxSellTax: 10.0          // Maximum acceptable sell tax
-  }
-}
+5. Start the bot:
+```bash
+pnpm start
 ```
 
 ## Usage
 
-1. Build the project:
-   ```bash
-   pnpm build
-   ```
+1. Start the bot in Telegram with `/start`
+2. Configure your wallet using the wallet menu
+3. Set up your trading parameters in settings
+4. Use the snipe menu to start trading
 
-2. Start the bot:
-   ```bash
-   pnpm start
-   ```
+### Available Commands
 
-3. Development mode:
-   ```bash
-   pnpm dev
-   ```
+- `/start` - Initialize the bot
+- `/help` - Show available commands
+- `/wallet` - Manage your wallet
+- `/snipe <token>` - Quick snipe a token
+- `/monitor <token>` - Monitor token price
+- `/settings` - Configure bot settings
 
-## Project Structure
+## Security Features
 
+- User authorization
+- Rate limiting
+- Command restrictions
+- Transaction confirmation
+- Anti-MEV protection
+- Risk analysis
+
+## Development
+
+1. Start in development mode:
+```bash
+pnpm dev
 ```
-src/
-├── analysis/          # Token analysis tools
-├── bot/              # Telegram bot implementation
-├── config/           # Configuration management
-├── trading/          # Trading functionality
-├── utils/
-│   ├── logger/       # Logging system
-│   ├── solana/       # Solana client
-│   └── wallet/       # Wallet management
-└── types/            # Global type definitions
+
+2. Run tests:
+```bash
+pnpm test
 ```
 
-## Security
+3. Lint code:
+```bash
+pnpm lint
+```
 
-- Never share your seed phrase or private keys
-- Keep your .env file secure
-- Use secure RPC endpoints
-- Monitor transaction logs
-- Set appropriate trading limits
+## Architecture
+
+- TypeScript-based implementation
+- Modular design
+- Event-driven architecture
+- Comprehensive logging
+- Error handling
+- Clean code practices
 
 ## Contributing
 
@@ -134,8 +129,8 @@ src/
 
 ## License
 
-ISC License
+MIT License - see LICENSE file for details
 
 ## Disclaimer
 
-Trading cryptocurrencies carries significant risk. This bot is for educational purposes only. Always do your own research and never trade with funds you cannot afford to lose.
+This bot is for educational purposes only. Use at your own risk. Always verify transactions before confirming them.

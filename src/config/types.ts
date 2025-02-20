@@ -1,3 +1,9 @@
+export interface BalanceThresholds {
+  minimum: number;
+  warning: number;
+  maximum: number;
+}
+
 export interface TradingConfig {
   maxSlippage: number;
   minLiquidity: number;
@@ -6,6 +12,7 @@ export interface TradingConfig {
   priorityFee: number;
   maxBuyAmount: number;
   defaultAmount: number;
+  balanceThresholds: BalanceThresholds;
 }
 
 export interface RiskConfig {
@@ -42,11 +49,13 @@ export interface Config {
   telegram: {
     botToken: string;
     adminChatId: string;
+    allowedUsers?: string[];
   };
   solana: {
     rpcUrl: string;
     walletId: string;
     seedPhrase: string;
+    network: 'mainnet-beta' | 'testnet' | 'devnet';
   };
   trading: TradingConfig;
   risk: RiskConfig;
