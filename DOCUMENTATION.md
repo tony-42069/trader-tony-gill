@@ -225,20 +225,24 @@ Options:
   [history] - View transaction history
 ```
 
-## 5. Configuration
+## 5. Configuration and Security
+
+### ⚠️ CRITICAL SECURITY WARNINGS
+- NEVER commit `.env` files or any files containing real credentials
+- NEVER share or expose your seed phrases, private keys, or API tokens
+- NEVER include real values in `.env.example` files
+- ALWAYS add sensitive files to `.gitignore`
+- ALWAYS rotate compromised credentials immediately
+- ALWAYS use environment variables for sensitive data
+- NEVER store secrets in code or configuration files
+- REGULARLY audit your security practices
 
 ### Environment Variables
-```bash
-# Required
-TELEGRAM_BOT_TOKEN=your_bot_token
-ADMIN_CHAT_ID=your_chat_id
-SOLANA_RPC_URL=your_rpc_url
-WALLET_SEED_PHRASE=your_seed_phrase
-
-# Optional
-NODE_ENV=production
-LOG_LEVEL=info
-```
+Required environment variables are defined in `.env.example`. To set up:
+1. Copy `.env.example` to `.env`
+2. Fill in your actual values in `.env`
+3. Ensure `.env` is in `.gitignore`
+4. Never commit `.env` to version control
 
 ### Trading Parameters
 ```typescript
@@ -272,22 +276,26 @@ export const config = {
 ## 6. Development Guide
 
 ### Setup Instructions
+
+1. Clone and install:
 ```bash
-# Clone repository
 git clone https://github.com/tony-42069/trader-tony-gill.git
 cd trader-tony-gill
-
-# Install dependencies
 pnpm install
+```
 
-# Configure environment
+2. Configure environment (IMPORTANT):
+```bash
+# Create your .env file (NEVER commit this file)
 cp .env.example .env
-# Edit .env with your values
 
-# Build project
+# Edit .env with your actual values
+# NEVER share these values or commit this file
+```
+
+3. Build and run:
+```bash
 pnpm build
-
-# Start bot
 pnpm start
 ```
 
