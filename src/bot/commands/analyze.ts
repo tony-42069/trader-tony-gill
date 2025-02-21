@@ -2,6 +2,13 @@ import TelegramBot from 'node-telegram-bot-api';
 import { BotContext } from '../types';
 import { TokenAnalyzer, getRiskLevel, TokenWarning } from '../../analysis';
 import { PublicKey } from '@solana/web3.js';
+import { 
+  sniperTonyKeyboard, 
+  monitorKeyboard,
+  getTokenAnalysisMessage,
+  getSuccessMessage,
+  getErrorMessage 
+} from '../ui';
 
 export const createAnalyzeCommand = (bot: TelegramBot, context: BotContext) => ({
   command: '/analyze',
@@ -23,7 +30,7 @@ export const createAnalyzeCommand = (bot: TelegramBot, context: BotContext) => (
       // Validate token address
       new PublicKey(tokenAddress);
 
-      await bot.sendMessage(chatId, '🔍 Analyzing token...');
+      await bot.sendMessage(chatId, getTokenAnalysisMessage(tokenAddress));
 
       // Create analyzer instance
       const analyzer = context.tokenAnalyzer;
@@ -77,15 +84,38 @@ ${analysis.risk.warnings.length ? analysis.risk.warnings.map((w: TokenWarning) =
 Last Updated: ${analysis.lastAnalyzed.toLocaleString()}
 `;
 
+      // Send analysis results with action buttons
       await bot.sendMessage(chatId, message, {
-        parse_mode: 'Markdown'
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '🎯 Snipe Token', callback_data: `snipe_setup_${tokenAddress}` },
+              { text: '📊 Monitor', callback_data: `monitor_setup_${tokenAddress}` }
+            ],
+            [
+              { text: '🔄 Refresh Analysis', callback_data: `analyze_refresh_${tokenAddress}` },
+              { text: '⬅️ Back', callback_data: 'main_menu' }
+            ]
+          ]
+        }
       });
 
     } catch (error) {
       context.logger.error('Token analysis failed:', error);
       await bot.sendMessage(
         chatId,
-        `❌ Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        getErrorMessage(`Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`),
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🔄 Try Again', callback_data: `analyze_${tokenAddress}` },
+                { text: '⬅️ Back', callback_data: 'main_menu' }
+              ]
+            ]
+          }
+        }
       );
     }
   }

@@ -2,12 +2,19 @@ import TelegramBot from 'node-telegram-bot-api';
 import { Logger } from 'winston';
 import { BotConfig, BotContext, CommandHandler, BotError } from './types';
 import {
-  mainMenuKeyboard,
-  walletKeyboard,
-  snipeKeyboard,
+  mainKeyboard,
+  sniperTonyKeyboard,
+  buyKeyboard,
+  sniperSettingsKeyboard,
   monitorKeyboard,
-  settingsKeyboard
-} from './keyboards';
+  getWelcomeMessage,
+  getSniperTonyWelcome,
+  getTokenAnalysisMessage,
+  getSnipeConfirmationMessage,
+  getMonitoringSetupMessage,
+  getErrorMessage,
+  getSuccessMessage
+} from './ui';
 import { handleCallbacks } from './commands';
 
 export class TraderTonyBot {
@@ -16,6 +23,7 @@ export class TraderTonyBot {
   private rateLimits: Map<string, number>;
   private readonly RATE_LIMIT_WINDOW = 1000; // 1 second
   private readonly MAX_REQUESTS = 5; // Max 5 requests per second
+  private lastMessageIds: Map<string, number>; // Track last message ID per chat
 
   constructor(
     private config: BotConfig,
@@ -24,6 +32,7 @@ export class TraderTonyBot {
     this.bot = new TelegramBot(config.token, { polling: true });
     this.commands = new Map();
     this.rateLimits = new Map();
+    this.lastMessageIds = new Map();
     this.setupErrorHandling();
   }
 
@@ -67,16 +76,16 @@ export class TraderTonyBot {
           return;
         }
 
-      // Handle callback data based on prefix
-      const [prefix] = query.data.split('_');
-      const handler = handleCallbacks[prefix as keyof typeof handleCallbacks];
-      
-      if (handler) {
-        await handler(this.bot, this.context, query);
-      } else {
-        await this.handleCallbackQuery(query);
-      }
+        // Handle callback data based on prefix
+        const [prefix] = query.data.split('_');
+        const handler = handleCallbacks[prefix as keyof typeof handleCallbacks];
         
+        if (handler) {
+          await handler(this.bot, this.context, query);
+        } else {
+          await this.handleCallbackQuery(query);
+        }
+          
       } catch (error) {
         this.context.logger.error('Error handling callback query:', error);
         await this.bot.answerCallbackQuery(query.id, {
@@ -95,7 +104,7 @@ export class TraderTonyBot {
 
     // Handle navigation
     if (data === 'main_menu') {
-      await this.showMainMenu(chatId);
+      await this.editToMainMenu(chatId, query.message.message_id);
       await this.bot.answerCallbackQuery(query.id);
       return;
     }
@@ -109,7 +118,7 @@ export class TraderTonyBot {
 
     // Handle sniper actions
     if (data.startsWith('snipe_')) {
-      await this.handleSnipeCallback(chatId, data);
+      await this.handleSnipeCallback(chatId, data, query);
       await this.bot.answerCallbackQuery(query.id);
       return;
     }
@@ -131,38 +140,78 @@ export class TraderTonyBot {
     await this.bot.answerCallbackQuery(query.id);
   }
 
-  private async showMainMenu(chatId: string): Promise<void> {
-    const message = `
-*TraderTony Menu* 🤖
+  private async editToMainMenu(chatId: string, messageId: number): Promise<void> {
+    const walletAddress = this.context.walletManager.getPublicKey().toString();
+    const balance = await this.context.walletManager.getBalance();
+    
+    const welcomeData = {
+      walletAddress,
+      balance: balance / 1e9,
+      orderCount: 0,
+      securityStatus: '🔒 Secure'
+    };
 
-Choose an option:
-🔹 Wallet - Manage your wallet
-🔹 Snipe - Trade tokens
-🔹 Monitor - Track prices
-🔹 Settings - Configure bot
-`;
-
-    await this.bot.sendMessage(chatId, message, {
-      reply_markup: mainMenuKeyboard,
-      parse_mode: 'Markdown'
+    await this.bot.editMessageText(getWelcomeMessage(welcomeData), {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+      reply_markup: mainKeyboard
     });
   }
 
+  private async showMainMenu(chatId: string): Promise<void> {
+    const walletAddress = this.context.walletManager.getPublicKey().toString();
+    const balance = await this.context.walletManager.getBalance();
+    
+    const welcomeData = {
+      walletAddress,
+      balance: balance / 1e9,
+      orderCount: 0,
+      securityStatus: '🔒 Secure'
+    };
+
+    // Delete previous menu if exists
+    const lastMessageId = this.lastMessageIds.get(chatId);
+    if (lastMessageId) {
+      try {
+        await this.bot.deleteMessage(chatId, lastMessageId);
+      } catch (error) {
+        // Ignore deletion errors
+      }
+    }
+
+    // Send new menu
+    const message = await this.bot.sendMessage(chatId, getWelcomeMessage(welcomeData), {
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+      reply_markup: mainKeyboard
+    });
+
+    // Store new message ID
+    this.lastMessageIds.set(chatId, message.message_id);
+  }
+
   private async handleWalletCallback(chatId: string, data: string): Promise<void> {
+    const walletManager = this.context.walletManager;
+    
     switch (data) {
       case 'wallet_balance':
-        const balance = await this.context.walletManager.getBalance();
-        await this.bot.sendMessage(chatId, `Current Balance: ${balance / 1e9} SOL`, {
-          reply_markup: walletKeyboard
-        });
+        const balance = await walletManager.getBalance();
+        await this.bot.sendMessage(
+          chatId,
+          getSuccessMessage(`Current Balance: ${balance / 1e9} SOL`),
+          { reply_markup: buyKeyboard }
+        );
         break;
 
       case 'wallet_address':
-        const address = this.context.walletManager.getPublicKey().toString();
-        await this.bot.sendMessage(chatId, `Wallet Address: \`${address}\``, {
-          parse_mode: 'Markdown',
-          reply_markup: walletKeyboard
-        });
+        const address = walletManager.getPublicKey().toString();
+        await this.bot.sendMessage(
+          chatId,
+          getSuccessMessage(`Your wallet address:\n\`${address}\`\n(tap to copy)`),
+          { parse_mode: 'Markdown', reply_markup: buyKeyboard }
+        );
         break;
 
       case 'wallet_refresh':
@@ -174,25 +223,96 @@ Choose an option:
     }
   }
 
-  private async handleSnipeCallback(chatId: string, data: string): Promise<void> {
-    // Placeholder for snipe functionality
-    await this.bot.sendMessage(chatId, 'Snipe functionality coming soon!', {
-      reply_markup: snipeKeyboard
-    });
+  private async handleSnipeCallback(chatId: string, data: string, query: TelegramBot.CallbackQuery): Promise<void> {
+    if (!query.message) return;
+
+    switch (data) {
+      case 'new_snipe':
+      case 'quick_snipe':
+      case 'custom_snipe':
+        const sniperStatus = {
+          status: '🟢 Ready',
+          snipeCount: 0,
+          successRate: 100,
+          protectionStatus: '✅ Active'
+        };
+        await this.bot.editMessageText(getSniperTonyWelcome(sniperStatus), {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: sniperTonyKeyboard
+        });
+        break;
+
+      case 'sniper_settings':
+        await this.bot.editMessageText('Configure your sniper settings:', {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          reply_markup: sniperSettingsKeyboard
+        });
+        break;
+
+      default:
+        await this.bot.editMessageText('Select your sniping strategy:', {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          reply_markup: sniperTonyKeyboard
+        });
+    }
   }
 
   private async handleMonitorCallback(chatId: string, data: string): Promise<void> {
-    // Placeholder for monitor functionality
-    await this.bot.sendMessage(chatId, 'Monitor functionality coming soon!', {
-      reply_markup: monitorKeyboard
-    });
+    switch (data) {
+      case 'token_monitor':
+      case 'sniper_alerts':
+      case 'price_alerts':
+      case 'volume_alerts':
+        const setupMessage = getMonitoringSetupMessage(
+          'Enter token address...',
+          5.0,
+          50.0
+        );
+        await this.bot.sendMessage(chatId, setupMessage, {
+          reply_markup: monitorKeyboard
+        });
+        break;
+
+      case 'view_alerts':
+        await this.bot.sendMessage(
+          chatId,
+          'Your active alerts will be displayed here.',
+          { reply_markup: monitorKeyboard }
+        );
+        break;
+
+      default:
+        await this.bot.sendMessage(
+          chatId,
+          'Select monitoring option:',
+          { reply_markup: monitorKeyboard }
+        );
+    }
   }
 
   private async handleSettingsCallback(chatId: string, data: string): Promise<void> {
-    // Placeholder for settings functionality
-    await this.bot.sendMessage(chatId, 'Settings functionality coming soon!', {
-      reply_markup: settingsKeyboard
-    });
+    switch (data) {
+      case 'settings_trading':
+      case 'settings_risk':
+      case 'settings_monitoring':
+        await this.bot.sendMessage(
+          chatId,
+          'Configure your trading settings:',
+          { reply_markup: sniperSettingsKeyboard }
+        );
+        break;
+
+      default:
+        await this.bot.sendMessage(
+          chatId,
+          'Select settings category:',
+          { reply_markup: sniperSettingsKeyboard }
+        );
+    }
   }
 
   private isAuthorized(chatId: string): boolean {
@@ -219,6 +339,14 @@ Choose an option:
 
   public async start(): Promise<void> {
     this.setupCallbackQueryHandler();
+    
+    // Handle /start command
+    this.bot.onText(/\/start/, async (msg: TelegramBot.Message) => {
+      const chatId = msg.chat.id.toString();
+      await this.showMainMenu(chatId);
+    });
+
+    // Handle all other messages
     this.bot.on('message', async (msg: TelegramBot.Message) => {
       const chatId = msg.chat.id.toString();
 

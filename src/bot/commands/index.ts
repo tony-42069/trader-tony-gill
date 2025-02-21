@@ -1,6 +1,12 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { CommandHandler, BotContext } from '../types';
-import { mainMenuKeyboard, walletKeyboard } from '../keyboards';
+import { 
+  mainKeyboard, 
+  buyKeyboard,
+  getWelcomeMessage,
+  getSuccessMessage,
+  getErrorMessage 
+} from '../ui';
 import { createAnalyzeCommand } from './analyze';
 import { createSnipeCommand, handleSnipeCallback } from './snipe';
 import { createMonitorCommand, handleMonitorCallback } from './monitor';
@@ -21,24 +27,19 @@ export const createStartCommand = (bot: TelegramBot, context: BotContext): Comma
   description: 'Initialize the bot and display welcome message',
   handler: createHandler(bot, context, async (msg: TelegramBot.Message, _args: string[]) => {
     const chatId = msg.chat.id.toString();
-    const firstName = msg.from?.first_name || 'User';
 
-    const welcomeMessage = `
-Welcome to TraderTony, ${firstName}! 🚀
+    const welcomeData = {
+      walletAddress: context.walletManager.getPublicKey().toString(),
+      balance: await context.walletManager.getBalance() / 1e9,
+      orderCount: 0,
+      securityStatus: '🔒 Secure'
+    };
 
-I'm your Solana trading assistant. Here's what I can do:
-
-🔹 Monitor token prices and liquidity
-🔹 Execute trades with custom parameters
-🔹 Manage your wallet and positions
-🔹 Provide real-time market insights
-
-Use the menu below to get started:
-`;
-
-    await bot.sendMessage(chatId, welcomeMessage, {
-      reply_markup: mainMenuKeyboard,
-      parse_mode: 'Markdown'
+    // Send single welcome message with menu
+    await bot.sendMessage(chatId, getWelcomeMessage(welcomeData), {
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true,
+      reply_markup: mainKeyboard
     });
   })
 });
@@ -50,32 +51,26 @@ export const createHelpCommand = (bot: TelegramBot, context: BotContext): Comman
     const chatId = msg.chat.id.toString();
 
     const helpMessage = `
-*Available Commands:*
+*TraderTony Help Center* 🤖
 
-📝 *Basic Commands*
-/start - Initialize the bot
-/help - Show this help message
-/menu - Display main menu
+*Core Features*
+🎯 SNIPERTONY - Advanced sniping system
+💰 Smart Trading - Auto TP/SL, Anti-Rug
+📊 Real-time Monitoring - Price & Volume
+🔒 Secure Wallet Integration
 
-💰 *Wallet Commands*
-/wallet - View wallet info and balance
-/address - Show your wallet address
+*Available Commands*
+/start - Launch TraderTony
+/help - Show this menu
+/snipe <token> <amount> - Quick snipe
+/monitor <token> - Track token
 
-🎯 *Trading Commands*
-/snipe <token> - Quick snipe a token
-/monitor <token> - Monitor token price
-/position - View active positions
-
-⚙️ *Settings Commands*
-/settings - Configure bot settings
-/risk - Adjust risk parameters
-/fees - Set priority fees
-
-Need more help? Use the menu below:
+*Need more help?*
+Select an option from the menu below:
 `;
 
     await bot.sendMessage(chatId, helpMessage, {
-      reply_markup: mainMenuKeyboard,
+      reply_markup: mainKeyboard,
       parse_mode: 'Markdown'
     });
   })
@@ -93,31 +88,32 @@ export const createWalletCommand = (bot: TelegramBot, context: BotContext): Comm
       const state = context.walletManager.getState();
 
       const walletMessage = `
-*Wallet Information* 💼
+*TraderTony Wallet* 💼
 
-*Address:* \`${publicKey}\`
 *Balance:* ${balance / 1e9} SOL
 *Status:* ${state.isActive ? '🟢 Active' : '🔴 Inactive'}
-*Last Updated:* ${new Date(state.lastUpdated).toLocaleString()}
 
-Recent Transactions:
+*Your Address*
+\`${publicKey}\` (tap to copy)
+
+*Recent Activity*
 ${state.transactions.slice(0, 3).map((tx: TransactionHistory) => `
 🔹 ${tx.type.toUpperCase()}: ${tx.amount} SOL
-   Status: ${tx.status}
-   Time: ${new Date(tx.timestamp).toLocaleString()}
+   ${tx.status} • ${new Date(tx.timestamp).toLocaleString()}
 `).join('\n')}
 
-Use the menu below to manage your wallet:
+Select an action below:
 `;
 
       await bot.sendMessage(chatId, walletMessage, {
-        reply_markup: walletKeyboard,
+        reply_markup: buyKeyboard,
         parse_mode: 'Markdown'
       });
     } catch (error) {
       await bot.sendMessage(
         chatId,
-        `Error fetching wallet information: ${error instanceof Error ? error.message : 'Unknown error'}`
+        getErrorMessage(`Error fetching wallet information: ${error instanceof Error ? error.message : 'Unknown error'}`),
+        { parse_mode: 'Markdown' }
       );
     }
   })
