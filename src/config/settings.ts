@@ -18,22 +18,35 @@ if (!process.env.SOLANA_RPC_URL) {
 
 export const config: Config = {
   telegram: {
-    botToken: process.env.TELEGRAM_BOT_TOKEN,
-    adminChatId: process.env.ADMIN_CHAT_ID
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    chatId: process.env.TELEGRAM_CHAT_ID || '',
+    allowedUsers: (process.env.TELEGRAM_ALLOWED_USERS || '').split(',').filter(Boolean)
   },
   solana: {
-    rpcUrl: process.env.SOLANA_RPC_URL,
-    walletId: process.env.WALLET_ID || '',
-    seedPhrase: process.env.WALLET_SEED_PHRASE || ''
+    rpcUrl: process.env.SOLANA_RPC_URL || '',
+    walletId: process.env.SOLANA_WALLET_ID || '',
+    seedPhrase: process.env.SOLANA_SEED_PHRASE || '',
+    network: (process.env.SOLANA_NETWORK || 'devnet') as 'mainnet-beta' | 'testnet' | 'devnet',
+    commitment: 'confirmed' as const,
+  },
+  raydium: {
+    programId: process.env.RAYDIUM_PROGRAM_ID || '',
+    defaultSlippage: 1.0,
+    priorityFee: 0.000001
   },
   trading: {
-    maxSlippage: 1.0,         // Maximum slippage percentage
-    minLiquidity: 1000,       // Minimum liquidity in USD
-    takeProfit: 50.0,         // Take profit percentage
-    stopLoss: 20.0,           // Stop loss percentage
-    priorityFee: 0.0001,      // Priority fee in SOL
-    maxBuyAmount: 1.0,        // Maximum buy amount in SOL
-    defaultAmount: 0.1        // Default quick snipe amount
+    maxSlippage: 1.0,
+    minLiquidity: 1000,
+    takeProfit: 1.5,
+    stopLoss: 0.8,
+    priorityFee: 0.000001,
+    maxBuyAmount: 10,
+    defaultAmount: 0.1,
+    balanceThresholds: {
+      minSol: 0.1,
+      minUsdc: 10,
+      warningThreshold: 0.5
+    }
   },
   risk: {
     maxRiskScore: 70,         // Maximum acceptable risk score
@@ -61,6 +74,9 @@ export const config: Config = {
     logDirectory: 'logs',
     errorLogName: 'error.log',
     tradeLogName: 'trades.log'
+  },
+  birdeye: {
+    apiKey: process.env.BIRDEYE_API_KEY || ''
   }
 };
 

@@ -1,9 +1,10 @@
 export type LogLevel = 'error' | 'warn' | 'info' | 'trade' | 'snipe' | 'debug';
 
 export interface LogContext {
-  requestId: string;
   timestamp: string;
-  log: (level: LogLevel, message: string, meta?: Record<string, any>) => void;
+  pid: number;
+  hostname: string;
+  environment: string;
 }
 
 export interface PerformanceMetric {

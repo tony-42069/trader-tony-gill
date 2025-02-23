@@ -1,4 +1,4 @@
-import { Connection, Transaction, PublicKey, TransactionSignature, VersionedTransaction } from '@solana/web3.js';
+import { Connection, Transaction, PublicKey, TransactionSignature, VersionedTransaction, AccountInfo, ParsedAccountData, TransactionResponse } from '@solana/web3.js';
 import { config } from '../../config/settings';
 import { logger, createLogContext } from '../logger';
 import {
@@ -7,7 +7,8 @@ import {
   HealthCheckResult,
   SolanaError,
   SolanaErrorCodes,
-  SolanaCommitment
+  SolanaCommitment,
+  TokenAmount
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
@@ -155,6 +156,56 @@ export class SolanaClientImpl implements SolanaClient {
       maxRetries: this.maxRetries,
       priorityFee: this.priorityFee
     });
+  }
+
+  async getAccountInfo(address: PublicKey): Promise<AccountInfo<Buffer> | null> {
+    return this.rpcConnection.getAccountInfo(address);
+  }
+
+  async getTokenLargestAccounts(mint: PublicKey): Promise<{ address: PublicKey; amount: TokenAmount }[]> {
+    const response = await this.rpcConnection.getTokenLargestAccounts(mint);
+    return response.value;
+  }
+
+  async getTokenSupply(mint: PublicKey): Promise<{ amount: number; decimals: number }> {
+    const response = await this.rpcConnection.getTokenSupply(mint);
+    return {
+      amount: Number(response.value.amount),
+      decimals: response.value.decimals
+    };
+  }
+
+  async getRecentTransactions(address: PublicKey): Promise<TransactionResponse[]> {
+    const signatures = await this.rpcConnection.getSignaturesForAddress(address, {
+      limit: 100
+    });
+
+    const transactions = await Promise.all(
+      signatures.map(async sig => {
+        const tx = await this.rpcConnection.getTransaction(sig.signature);
+        return tx;
+      })
+    );
+
+    return transactions.filter((tx): tx is TransactionResponse => tx !== null);
+  }
+
+  async getTokenAccountsByOwner(owner: PublicKey): Promise<Array<{
+    pubkey: PublicKey;
+    account: AccountInfo<ParsedAccountData>;
+  }>> {
+    const response = await this.rpcConnection.getParsedTokenAccountsByOwner(owner, {
+      programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+    });
+    return response.value;
+  }
+
+  async sendTransaction(transaction: Transaction): Promise<string> {
+    const signature = await this.rpcConnection.sendRawTransaction(
+      transaction.serialize()
+    );
+    await this.rpcConnection.confirmTransaction(signature);
+    return signature;
   }
 }
 

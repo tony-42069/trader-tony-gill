@@ -1,6 +1,7 @@
 import { config } from '../../config/settings';
 import { logger } from '../logger';
 import { BirdeyeClient, BirdeyeTokenMetadata, BirdeyeTokenPrice, BirdeyeError } from './types';
+import { Config } from '../../config/types';
 
 const BIRDEYE_API_URL = 'https://public-api.birdeye.so';
 const MAX_RETRIES = 3;
@@ -12,8 +13,8 @@ export class BirdeyeClientImpl implements BirdeyeClient {
   private lastRequestTime = Date.now();
   private requestQueue: Promise<any> = Promise.resolve();
 
-  constructor() {
-    this.apiKey = config.birdeye.apiKey;
+  constructor(config: Config) {
+    this.apiKey = config.birdeye?.apiKey || '';
     this.validateApiKey();
   }
 
@@ -166,6 +167,6 @@ export class BirdeyeClientImpl implements BirdeyeClient {
 }
 
 // Create default client instance
-export const createBirdeyeClient = (): BirdeyeClient => {
-  return new BirdeyeClientImpl();
+export const createBirdeyeClient = (config: Config): BirdeyeClient => {
+  return new BirdeyeClientImpl(config);
 };

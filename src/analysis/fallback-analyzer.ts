@@ -1,69 +1,78 @@
 import { PublicKey } from '@solana/web3.js';
 import { SolanaClientImpl } from '../utils/solana/client';
+import { TokenAmount } from '../utils/solana/types';
 import { logger } from '../utils/logger';
-import { FallbackTokenData } from './types';
 
-export class FallbackTokenAnalyzer {
+export interface TokenHolder {
+  address: string;
+  amount: number;
+}
+
+export interface FallbackTokenData {
+  supply: number;
+  holders: TokenHolder[];
+  hasAccount: boolean;
+}
+
+export class FallbackAnalyzer {
   constructor(private readonly solanaClient: SolanaClientImpl) {}
 
-  async analyzeToken(address: string): Promise<FallbackTokenData> {
+  async analyzeToken(tokenAddress: string): Promise<FallbackTokenData> {
     try {
-      logger.info('Using fallback token analyzer', { address });
-      
-      const tokenPubkey = new PublicKey(address);
-      
-      // Get account info
-      const accountInfo = await this.solanaClient.getAccountInfo(tokenPubkey);
-      const hasAccount = accountInfo !== null;
+      const tokenMint = new PublicKey(tokenAddress);
+      let supply = 0;
+      let holders: TokenHolder[] = [];
+      let hasAccount = false;
 
-      let supply = BigInt(0);
-      let decimals = 0;
-      let holders = 0;
-
-      if (hasAccount) {
-        try {
-          // Get token supply
-          const supplyResponse = await this.solanaClient.getTokenSupply(tokenPubkey);
-          if (supplyResponse) {
-            supply = BigInt(supplyResponse.value.amount);
-            decimals = supplyResponse.value.decimals;
-          }
-
-          // Get largest token accounts
-          const holdersResponse = await this.solanaClient.getTokenLargestAccounts(tokenPubkey);
-          if (holdersResponse?.value) {
-            holders = holdersResponse.value.length;
-          }
-        } catch (error) {
-          logger.warn('Failed to get token details', { error, address });
+      // Get token supply
+      try {
+        const supplyResponse = await this.solanaClient.getTokenSupply(tokenMint);
+        if (supplyResponse) {
+          supply = supplyResponse.amount;
         }
+      } catch (error) {
+        logger.error('Failed to fetch token supply:', {
+          token: tokenAddress,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
 
-      const fallbackData: FallbackTokenData = {
-        address,
-        supply,
-        decimals,
-        holders,
-        accountInfo: hasAccount,
-        analysis: {
-          hasValidAccount: hasAccount,
-          holderCount: holders,
-          isInitialized: hasAccount
+      // Get largest token holders
+      try {
+        const holdersResponse = await this.solanaClient.getTokenLargestAccounts(tokenMint);
+        if (holdersResponse) {
+          holders = holdersResponse.map(holder => ({
+            address: holder.address.toString(),
+            amount: Number(holder.amount.amount) / Math.pow(10, holder.amount.decimals)
+          }));
         }
-      };
+      } catch (error) {
+        logger.error('Failed to fetch token holders:', {
+          token: tokenAddress,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
 
-      logger.info('Fallback analysis complete', { 
-        address,
-        hasAccount,
+      // Check if token account exists
+      try {
+        const accountInfo = await this.solanaClient.getAccountInfo(tokenMint);
+        hasAccount = accountInfo !== null;
+      } catch (error) {
+        logger.error('Failed to check token account:', {
+          token: tokenAddress,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+
+      return {
+        supply,
         holders,
-        decimals
-      });
-
-      return fallbackData;
+        hasAccount
+      };
     } catch (error) {
-      logger.error('Fallback analysis failed', { 
-        error: error instanceof Error ? error.message : 'Unknown error',
-        address 
+      logger.error('Fallback analysis failed:', {
+        token: tokenAddress,
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
       throw error;
     }

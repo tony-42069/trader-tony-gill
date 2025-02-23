@@ -1,11 +1,12 @@
-import { Connection } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { TokenAnalyzerImpl } from '../../analysis/analyzer';
 import { WalletManagerImpl } from '../../utils/wallet/wallet';
+import { SniperService } from './types';
 import { SniperServiceImpl } from './service';
+import { config } from '../../config/settings';
 import { 
   SnipeConfig, 
   SnipeResult, 
-  SniperService, 
   SnipeErrorCode,
   MEVProtection,
   GasOptimizer,
@@ -17,7 +18,6 @@ import {
 export {
   SnipeConfig,
   SnipeResult,
-  SniperService,
   SnipeErrorCode,
   MEVProtection,
   GasOptimizer,
@@ -38,13 +38,14 @@ export class SnipeError extends Error {
   }
 }
 
-export const createSniperService = (
+export function createSniperService(
   connection: Connection,
   tokenAnalyzer: TokenAnalyzerImpl,
   walletManager: WalletManagerImpl
-) => {
-  return new SniperServiceImpl(connection, tokenAnalyzer, walletManager);
-};
+): SniperService {
+  const raydiumProgramId = new PublicKey(config.raydium.programId);
+  return new SniperServiceImpl(connection, tokenAnalyzer, walletManager, raydiumProgramId);
+}
 
 export const DEFAULT_SNIPE_CONFIG: Partial<SnipeConfig> = {
   maxSlippage: 0.05, // 5%

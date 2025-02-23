@@ -1,7 +1,15 @@
+export interface SolanaConfig {
+  rpcUrl: string;
+  walletId: string;
+  seedPhrase: string;
+  network: 'mainnet-beta' | 'testnet' | 'devnet';
+  commitment: 'processed' | 'confirmed' | 'finalized';
+}
+
 export interface BalanceThresholds {
-  minimum: number;
-  warning: number;
-  maximum: number;
+  minSol: number;
+  minUsdc: number;
+  warningThreshold: number;
 }
 
 export interface TradingConfig {
@@ -13,6 +21,17 @@ export interface TradingConfig {
   maxBuyAmount: number;
   defaultAmount: number;
   balanceThresholds: BalanceThresholds;
+}
+
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+  allowedUsers: string[];
+}
+
+export interface BotConfig {
+  telegram: TelegramConfig;
+  allowedUsers: string[];
 }
 
 export interface RiskConfig {
@@ -45,6 +64,10 @@ export interface LoggerConfig {
   tradeLogName: string;
 }
 
+export interface BirdEyeConfig {
+  apiKey: string;
+}
+
 export interface Config {
   telegram: {
     botToken: string;
@@ -61,4 +84,5 @@ export interface Config {
   risk: RiskConfig;
   monitoring: MonitoringConfig;
   logger: LoggerConfig;
+  birdeye: BirdEyeConfig;
 }

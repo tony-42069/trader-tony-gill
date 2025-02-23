@@ -179,3 +179,48 @@ export interface GasOptimizer {
 }
 
 export type SnipeParams = SnipeConfig;
+
+export enum MEVRiskLevel {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH'
+}
+
+export interface MEVAnalysis {
+  risk: MEVRiskLevel;
+  sandwichDetected: boolean;
+  frontRunningDetected: boolean;
+  backRunningDetected: boolean;
+  recentMEVTransactions: number;
+  averagePriceImpact: number;
+  recommendations: string[];
+}
+
+export interface MEVProtection {
+  priorityFee: number;
+  recommendedSlippage: number;
+  recommendedDelay: number;
+  protectionEnabled: boolean;
+  riskLevel: MEVRiskLevel;
+  warnings: string[];
+}
+
+export interface SandwichPattern {
+  buyTx: Transaction;
+  targetTx: Transaction;
+  sellTx: Transaction;
+  priceImpact: number;
+}
+
+export interface MEVDetector {
+  detectMEV(tokenAddress: string): Promise<MEVAnalysis>;
+  protectFromMEV(tokenAddress: string, amount: number): Promise<MEVProtection>;
+}
+
+export interface MEVProtectionConfig {
+  enabled: boolean;
+  maxPriorityFee: number;
+  sandwichThreshold: number;
+  defaultSlippage: number;
+  minDelay: number;
+}

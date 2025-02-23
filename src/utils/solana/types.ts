@@ -1,7 +1,12 @@
-import { Connection, PublicKey, Transaction, TransactionSignature } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, TransactionSignature, AccountInfo, ParsedAccountData, TransactionResponse } from '@solana/web3.js';
 import { LogContext } from '../logger';
 
-export type SolanaCommitment = 'processed' | 'confirmed' | 'finalized';
+export interface TokenAmount {
+  amount: string;
+  decimals: number;
+  uiAmount: number | null;
+  uiAmountString: string;
+}
 
 export interface SolanaClient {
   getLatestBlockhash: () => Promise<{ blockhash: string; lastValidBlockHeight: number }>;
@@ -9,6 +14,15 @@ export interface SolanaClient {
   sendAndConfirmTransaction: (transaction: Transaction) => Promise<TransactionSignature>;
   checkHealth: () => Promise<HealthCheckResult>;
   withCommitment: (commitment: SolanaCommitment) => SolanaClient;
+  getAccountInfo(address: PublicKey): Promise<AccountInfo<Buffer> | null>;
+  getTokenSupply(mint: PublicKey): Promise<{ amount: number; decimals: number }>;
+  getTokenLargestAccounts(mint: PublicKey): Promise<{ address: PublicKey; amount: TokenAmount }[]>;
+  getRecentTransactions(address: PublicKey): Promise<TransactionResponse[]>;
+  getTokenAccountsByOwner(owner: PublicKey): Promise<Array<{
+    pubkey: PublicKey;
+    account: AccountInfo<ParsedAccountData>;
+  }>>;
+  sendTransaction(transaction: Transaction): Promise<string>;
 }
 
 export interface TransactionOptions {
@@ -46,37 +60,27 @@ export interface TransactionError extends Error {
   instruction?: number;
 }
 
-// Custom error codes for Solana operations
-export const SolanaErrorCodes = {
-  CONNECTION_FAILED: 'SOLANA_CONNECTION_FAILED',
-  TRANSACTION_FAILED: 'SOLANA_TRANSACTION_FAILED',
-  INSUFFICIENT_BALANCE: 'SOLANA_INSUFFICIENT_BALANCE',
-  INVALID_INSTRUCTION: 'SOLANA_INVALID_INSTRUCTION',
-  TIMEOUT: 'SOLANA_TIMEOUT',
-  BLOCKHASH_NOT_FOUND: 'SOLANA_BLOCKHASH_NOT_FOUND',
-  SIMULATION_FAILED: 'SOLANA_SIMULATION_FAILED'
-} as const;
+export enum SolanaCommitment {
+  PROCESSED = 'processed',
+  CONFIRMED = 'confirmed',
+  FINALIZED = 'finalized'
+}
 
-export type SolanaErrorCode = typeof SolanaErrorCodes[keyof typeof SolanaErrorCodes];
+export enum SolanaErrorCodes {
+  TRANSACTION_FAILED = 'TransactionFailed',
+  TIMEOUT = 'Timeout',
+  INVALID_ADDRESS = 'InvalidAddress',
+  INSUFFICIENT_FUNDS = 'InsufficientFunds',
+  UNKNOWN = 'Unknown'
+}
 
-// Custom error class for Solana operations
 export class SolanaError extends Error {
   constructor(
+    public readonly code: SolanaErrorCodes,
     message: string,
-    public code: SolanaErrorCode,
-    public metadata?: Record<string, any>
+    public readonly cause?: Error
   ) {
     super(message);
     this.name = 'SolanaError';
-    Object.setPrototypeOf(this, SolanaError.prototype);
-  }
-
-  toJSON() {
-    return {
-      name: this.name,
-      message: this.message,
-      code: this.code,
-      metadata: this.metadata
-    };
   }
 }

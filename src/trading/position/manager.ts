@@ -14,17 +14,21 @@ import { TokenAnalyzerImpl } from '../../analysis/analyzer';
 import { logger } from '../../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { PublicKey } from '@solana/web3.js';
+import { SolanaClientImpl } from '../../utils/solana/client';
+import { Wallet } from '../../utils/wallet';
+import { TradingConfig } from '../../config/trading';
 
 export class PositionManagerImpl implements PositionManager {
   private positions: Map<string, Position> = new Map();
   private monitor: PositionMonitor;
 
   constructor(
-    private raydiumClient: RaydiumClient,
-    private tokenAnalyzer: TokenAnalyzerImpl,
-    monitor: PositionMonitor
+    private readonly solanaClient: SolanaClientImpl,
+    private readonly raydiumClient: RaydiumClient,
+    private readonly wallet: Wallet,
+    private readonly config: TradingConfig
   ) {
-    this.monitor = monitor;
+    this.monitor = new PositionMonitorImpl(solanaClient, raydiumClient);
   }
 
   async createPosition(
@@ -276,20 +280,70 @@ export class PositionManagerImpl implements PositionManager {
     return this.closePosition(positionId, ExitReason.ERROR);
   }
 
-  async openPosition(params: {
-    tokenAddress: string;
-    amount: number;
-    entryPrice: number;
-    takeProfit?: number;
-    stopLoss?: number;
-  }): Promise<Position> {
-    return this.createPosition(
-      params.tokenAddress,
-      params.amount,
-      {
-        takeProfit: params.takeProfit,
-        stopLoss: params.stopLoss
-      }
-    );
+  async openPosition(params: OpenPositionParams): Promise<Position> {
+    const { tokenAddress, amount, stopLoss, takeProfit } = params;
+
+    // Validate parameters
+    if (!tokenAddress || !amount || amount <= 0) {
+      throw new Error('Invalid position parameters');
+    }
+
+    // Check if token exists and get metadata
+    const tokenMint = new PublicKey(tokenAddress);
+    const tokenInfo = await this.solanaClient.getAccountInfo(tokenMint);
+    if (!tokenInfo) {
+      throw new Error('Token not found');
+    }
+
+    // Get current token price
+    const pool = await this.raydiumClient.getPool(tokenAddress);
+    if (!pool) {
+      throw new Error('No liquidity pool found for token');
+    }
+
+    const poolState = await pool.fetchPoolState();
+    if (!poolState) {
+      throw new Error('Failed to fetch pool state');
+    }
+
+    // Calculate entry price and position size
+    const entryPrice = poolState.price;
+    const positionSize = amount * entryPrice;
+
+    // Validate against minimum position size
+    if (positionSize < this.config.minPositionSize) {
+      throw new Error(`Position size too small. Minimum: ${this.config.minPositionSize} SOL`);
+    }
+
+    // Create position object
+    const position: Position = {
+      id: uuidv4(),
+      tokenAddress: tokenAddress.toString(),
+      amount,
+      entryPrice,
+      currentPrice: entryPrice,
+      stopLoss: stopLoss || entryPrice * (1 - this.config.defaultStopLoss),
+      takeProfit: takeProfit || entryPrice * (1 + this.config.defaultTakeProfit),
+      status: PositionStatus.OPEN,
+      openedAt: new Date(),
+      updatedAt: new Date(),
+      pnl: 0,
+      pnlPercentage: 0
+    };
+
+    // Store position
+    this.positions.set(position.id, position);
+
+    // Start monitoring position
+    await this.monitor.startMonitoring(position);
+
+    logger.info('Position opened:', {
+      positionId: position.id,
+      token: position.tokenAddress,
+      amount: position.amount,
+      entryPrice: position.entryPrice
+    });
+
+    return position;
   }
 } 

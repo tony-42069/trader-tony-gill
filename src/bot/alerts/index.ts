@@ -4,6 +4,9 @@ import { TelegramAlertHandler } from './telegram-alert-handler';
 
 export * from './telegram-alert-handler';
 
-export const createTelegramAlertHandler = (bot: TelegramBot): AlertHandler => {
-  return new TelegramAlertHandler(bot);
-}; 
+export function createTelegramAlertHandler(
+  bot: TelegramBot,
+  chatId: string
+): AlertHandler {
+  return new TelegramAlertHandler(bot, chatId);
+} 

@@ -1,4 +1,5 @@
-import { Keypair, Transaction, PublicKey } from '@solana/web3.js';
+import { Keypair, Transaction, PublicKey, Connection } from '@solana/web3.js';
+import { Token, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { createDefaultSolanaClient } from '../solana';
 import { logger, createLogContext } from '../logger';
 import {
@@ -12,6 +13,64 @@ import {
 } from './types';
 
 const DEFAULT_MONITORING_INTERVAL = 60000; // 1 minute
+
+export interface Wallet {
+  publicKey: PublicKey;
+  signTransaction(tx: Transaction): Promise<Transaction>;
+  signAllTransactions(txs: Transaction[]): Promise<Transaction[]>;
+  getBalance(): Promise<number>;
+  getTokenBalance(mint: PublicKey): Promise<number>;
+  createTokenAccount(mint: PublicKey): Promise<PublicKey>;
+}
+
+export class KeypairWallet implements Wallet {
+  constructor(
+    private readonly keypair: Keypair,
+    private readonly connection: Connection
+  ) {}
+
+  get publicKey(): PublicKey {
+    return this.keypair.publicKey;
+  }
+
+  async signTransaction(tx: Transaction): Promise<Transaction> {
+    tx.partialSign(this.keypair);
+    return tx;
+  }
+
+  async signAllTransactions(txs: Transaction[]): Promise<Transaction[]> {
+    return Promise.all(txs.map(tx => this.signTransaction(tx)));
+  }
+
+  async getBalance(): Promise<number> {
+    return this.connection.getBalance(this.publicKey);
+  }
+
+  async getTokenBalance(mint: PublicKey): Promise<number> {
+    const token = new Token(
+      this.connection,
+      mint,
+      TOKEN_PROGRAM_ID,
+      this.keypair
+    );
+
+    const account = await token.getOrCreateAssociatedAccountInfo(this.publicKey);
+    const balance = await token.getAccountInfo(account.address);
+    return balance.amount.toNumber();
+  }
+
+  async createTokenAccount(mint: PublicKey): Promise<PublicKey> {
+    const token = new Token(
+      this.connection,
+      mint,
+      TOKEN_PROGRAM_ID,
+      this.keypair
+    );
+
+    const account = await token.createAssociatedTokenAccount(this.publicKey);
+    return account;
+  }
+}
 
 export class WalletManagerImpl implements WalletManager {
   private wallet!: Keypair;

@@ -4,6 +4,9 @@ import { config } from '../../config/settings';
 import { logger } from './logger';
 import { TraderError, errorCodes } from './errors';
 import type { LogContext } from './types';
+import winston from 'winston';
+import { LoggerConfig } from '../../config/types';
+import { createLogContext } from './context';
 
 export const initializeLogger = (): LogContext => {
   try {
@@ -61,3 +64,34 @@ process.on('SIGINT', async () => {
   await cleanupLogger();
   process.exit(0);
 });
+
+export function initLogger(config: LoggerConfig): winston.Logger {
+  const context = createLogContext();
+  
+  const logger = winston.createLogger({
+    level: config.logLevel || 'info',
+    format: winston.format.combine(
+      winston.format.timestamp(),
+      winston.format.json()
+    ),
+    defaultMeta: { context },
+    transports: [
+      new winston.transports.File({
+        filename: config.errorLogName || 'error.log',
+        level: 'error'
+      }),
+      new winston.transports.File({
+        filename: config.tradeLogName || 'trades.log',
+        level: 'info'
+      })
+    ]
+  });
+
+  if (process.env.NODE_ENV !== 'production') {
+    logger.add(new winston.transports.Console({
+      format: winston.format.simple()
+    }));
+  }
+
+  return logger;
+}

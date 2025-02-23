@@ -1,8 +1,7 @@
-import TelegramBot from 'node-telegram-bot-api';
-import { AlertHandler } from '../../trading/monitor/types';
-import { PriceAlert } from '../../trading/monitor/types';
+import { AlertHandler, TokenAlert } from '../../analysis/monitoring/types';
 import { logger } from '../../utils/logger';
 import { formatNumber } from '../../utils/format';
+import TelegramBot from 'node-telegram-bot-api';
 
 export class TelegramAlertHandler implements AlertHandler {
   private bot: TelegramBot;
@@ -14,66 +13,72 @@ export class TelegramAlertHandler implements AlertHandler {
     this.bot = new TelegramBot(token, { polling: false });
   }
 
-  async onPriceAlert(alert: PriceAlert): Promise<void> {
+  async handleAlert(alert: TokenAlert): Promise<void> {
     try {
-      const emoji = alert.changePercent >= 0 ? '📈' : '📉';
-      const message = [
-        `${emoji} Price Alert: ${alert.token.symbol}`,
-        `Old Price: ${formatNumber(alert.oldValue)} SOL`,
-        `New Price: ${formatNumber(alert.newValue)} SOL`,
-        `Change: ${formatNumber(alert.changePercent)}%`,
-        `\nToken: ${alert.token.address}`
-      ].join('\n');
-
+      const message = this.formatAlertMessage(alert);
       await this.bot.sendMessage(this.chatId, message, {
         parse_mode: 'HTML'
       });
     } catch (error) {
-      logger.error('Failed to send price alert:', {
+      logger.error('Failed to send alert:', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }
 
-  async onLiquidityAlert(alert: PriceAlert): Promise<void> {
-    try {
-      const emoji = alert.changePercent >= 0 ? '💧' : '🔥';
-      const message = [
-        `${emoji} Liquidity Alert: ${alert.token.symbol}`,
-        `Old Liquidity: ${formatNumber(alert.oldValue)} SOL`,
-        `New Liquidity: ${formatNumber(alert.newValue)} SOL`,
-        `Change: ${formatNumber(alert.changePercent)}%`,
-        `\nToken: ${alert.token.address}`
-      ].join('\n');
+  private formatAlertMessage(alert: TokenAlert): string {
+    const emoji = this.getAlertEmoji(alert);
+    const title = this.getAlertTitle(alert);
+    
+    return [
+      `${emoji} ${title}`,
+      `Old Value: ${formatNumber(alert.oldValue)} SOL`,
+      `New Value: ${formatNumber(alert.newValue)} SOL`,
+      `Change: ${formatNumber(alert.percentageChange)}%`,
+      `\nToken: ${alert.tokenAddress}`
+    ].join('\n');
+  }
 
-      await this.bot.sendMessage(this.chatId, message, {
-        parse_mode: 'HTML'
-      });
-    } catch (error) {
-      logger.error('Failed to send liquidity alert:', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+  private getAlertEmoji(alert: TokenAlert): string {
+    switch (alert.type) {
+      case 'price_increase':
+        return '📈';
+      case 'price_decrease':
+        return '📉';
+      case 'liquidity_increase':
+        return '💧';
+      case 'liquidity_decrease':
+        return '🔥';
+      case 'volume_spike':
+        return '🚀';
+      case 'volume_drop':
+        return '📉';
+      case 'high_risk':
+        return '⚠️';
+      case 'contract_change':
+        return '🔄';
+      default:
+        return '❓';
     }
   }
 
-  async onVolumeAlert(alert: PriceAlert): Promise<void> {
-    try {
-      const emoji = alert.changePercent >= 0 ? '🚀' : '📉';
-      const message = [
-        `${emoji} Volume Alert: ${alert.token.symbol}`,
-        `Old Volume: ${formatNumber(alert.oldValue)} SOL`,
-        `New Volume: ${formatNumber(alert.newValue)} SOL`,
-        `Change: ${formatNumber(alert.changePercent)}%`,
-        `\nToken: ${alert.token.address}`
-      ].join('\n');
-
-      await this.bot.sendMessage(this.chatId, message, {
-        parse_mode: 'HTML'
-      });
-    } catch (error) {
-      logger.error('Failed to send volume alert:', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+  private getAlertTitle(alert: TokenAlert): string {
+    switch (alert.type) {
+      case 'price_increase':
+      case 'price_decrease':
+        return 'Price Alert';
+      case 'liquidity_increase':
+      case 'liquidity_decrease':
+        return 'Liquidity Alert';
+      case 'volume_spike':
+      case 'volume_drop':
+        return 'Volume Alert';
+      case 'high_risk':
+        return 'Risk Alert';
+      case 'contract_change':
+        return 'Contract Alert';
+      default:
+        return 'Alert';
     }
   }
 }

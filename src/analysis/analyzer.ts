@@ -25,96 +25,49 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
     private raydiumClient: RaydiumClient
   ) {
     this.cache = new Map();
-    // Create a new Connection instance with confirmed commitment
     const connection = new Connection(config.solana.rpcUrl, 'confirmed');
-    this.contractAnalyzer = new ContractAnalyzer(
-      connection,
-      raydiumClient
-    );
+    this.contractAnalyzer = new ContractAnalyzer(connection, raydiumClient);
   }
 
-  async analyzeToken(
-    address: string | PublicKey,
-    options: AnalysisOptions = {}
-  ): Promise<TokenAnalysis> {
+  async analyzeToken(address: string | PublicKey): Promise<TokenAnalysis> {
     const tokenAddress = address.toString();
     const cached = this.cache.get(tokenAddress);
 
-    // Return cached result if valid and not forcing update
-    if (
-      cached &&
-      !options.forceUpdate &&
-      Date.now() - cached.lastAnalyzed.getTime() < this.CACHE_TTL
-    ) {
+    if (cached && Date.now() - cached.lastAnalyzed.getTime() < this.CACHE_TTL) {
       return cached;
     }
 
-    try {
-      // Validate token
-      if (!await this.isValidToken(address)) {
-        throw new Error('Invalid token address');
-      }
+    const metadata = await this.getTokenMetadata(address);
+    const price = await this.getTokenPrice(address);
+    const risk = await this.assessRisk(address);
 
-      // Get metadata (always required)
-      const metadata = await this.getTokenMetadata(address);
+    const analysis: TokenAnalysis = {
+      metadata,
+      price,
+      risk,
+      lastAnalyzed: new Date()
+    };
 
-      // Get price data if requested
-      const price = options.includePrice
-        ? await this.getTokenPrice(address)
-        : undefined;
-
-      // Assess risk if requested
-      const risk = options.includeRisk
-        ? await this.assessRisk(address)
-        : undefined;
-
-      const analysis: TokenAnalysis = {
-        metadata,
-        price: price || {
-          price: 0,
-          priceChange24h: 0,
-          volume24h: 0,
-          marketCap: 0,
-          fullyDilutedMarketCap: 0,
-          liquidity: 0,
-          lastUpdated: new Date()
-        },
-        risk: risk || {
-          score: 0,
-          buyTax: 0,
-          sellTax: 0,
-          isHoneypot: false,
-          isRenounced: false,
-          warnings: []
-        },
-        lastAnalyzed: new Date()
-      };
-
-      // Cache the result
-      this.cache.set(tokenAddress, analysis);
-
-      return analysis;
-    } catch (error) {
-      logger.error('Token analysis failed:', {
-        address: tokenAddress,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw error;
-    }
+    this.cache.set(tokenAddress, analysis);
+    return analysis;
   }
 
   async getTokenMetadata(address: string | PublicKey): Promise<TokenMetadata> {
     const tokenAddress = address.toString();
-    
     try {
-      // TODO: Implement token metadata fetching using Solana client
-      // This is a placeholder implementation
+      const accountInfo = await this.solanaClient.getAccountInfo(new PublicKey(tokenAddress));
+      if (!accountInfo) {
+        throw new Error('Token account not found');
+      }
+
+      const supply = await this.solanaClient.getTokenSupply(new PublicKey(tokenAddress));
+      
       return {
         address: tokenAddress,
         name: 'Unknown Token',
         symbol: 'UNKNOWN',
-        decimals: 9,
-        totalSupply: BigInt(0),
+        decimals: supply.decimals,
+        totalSupply: supply.amount,
         holders: 0,
         isVerified: false,
         createdAt: new Date()
@@ -129,23 +82,37 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
   }
 
   async getTokenPrice(address: string | PublicKey): Promise<TokenPrice> {
-    const tokenAddress = address.toString();
-    
     try {
-      // TODO: Implement price fetching using Raydium/Orca APIs
-      // This is a placeholder implementation
+      const pool = await this.raydiumClient.getPool(address.toString());
+      if (!pool) {
+        return {
+          price: 0,
+          priceChange24h: 0,
+          volume24h: 0,
+          marketCap: 0,
+          fullyDilutedMarketCap: 0,
+          liquidity: 0,
+          lastUpdated: new Date()
+        };
+      }
+
+      const poolState = await pool.fetchPoolState();
+      if (!poolState) {
+        throw new Error('Failed to fetch pool state');
+      }
+
       return {
-        price: 0,
+        price: Number(poolState.price),
         priceChange24h: 0,
-        volume24h: 0,
+        volume24h: Number(poolState.volume24h),
         marketCap: 0,
         fullyDilutedMarketCap: 0,
-        liquidity: 0,
+        liquidity: Number(poolState.liquidity),
         lastUpdated: new Date()
       };
     } catch (error) {
       logger.error('Failed to fetch token price:', {
-        address: tokenAddress,
+        address: address.toString(),
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       throw error;
@@ -153,51 +120,20 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
   }
 
   async assessRisk(address: string | PublicKey): Promise<TokenRisk> {
-    const tokenAddress = address.toString();
-    const warnings: TokenWarning[] = [];
-    
     try {
-      const metadata = await this.getTokenMetadata(address);
-      const price = await this.getTokenPrice(address);
-
-      // Check liquidity
-      if (price.liquidity < config.trading.minLiquidity) {
-        warnings.push({
-          type: TokenWarningType.LOW_LIQUIDITY,
-          severity: 'high',
-          message: 'Token has insufficient liquidity',
-          details: `Liquidity: ${price.liquidity} SOL`
-        });
-      }
-
-      // Check verification
-      if (!metadata.isVerified) {
-        warnings.push({
-          type: TokenWarningType.UNVERIFIED_CONTRACT,
-          severity: 'medium',
-          message: 'Token contract is not verified'
-        });
-      }
-
-      // Perform contract analysis
-      const contractAnalysis = await this.contractAnalyzer.analyzeContract(tokenAddress);
-
-      // Add contract warnings
-      for (const warning of contractAnalysis.warnings) {
-        warnings.push(this.mapWarningType(warning));
-      }
-
+      const contractAnalysis = await this.contractAnalyzer.analyzeContract(address.toString());
+      
       return {
         score: contractAnalysis.riskScore,
         buyTax: contractAnalysis.tax.buyTax,
         sellTax: contractAnalysis.tax.sellTax,
         isHoneypot: contractAnalysis.honeypot.isHoneypot,
         isRenounced: contractAnalysis.ownership.isRenounced,
-        warnings
+        warnings: contractAnalysis.warnings.map(warning => this.mapWarningType(warning))
       };
     } catch (error) {
       logger.error('Failed to assess token risk:', {
-        address: tokenAddress,
+        address: address.toString(),
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       throw error;
@@ -207,54 +143,19 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
   async isValidToken(address: string | PublicKey): Promise<boolean> {
     try {
       const pubkey = typeof address === 'string' ? new PublicKey(address) : address;
-      // TODO: Implement proper token validation
-      // This is a placeholder that just checks if it's a valid public key
-      return PublicKey.isOnCurve(pubkey.toBytes());
+      const accountInfo = await this.solanaClient.getAccountInfo(pubkey);
+      return accountInfo !== null;
     } catch {
       return false;
     }
   }
 
-  private mapWarningType(warning: string): TokenWarning {
-    if (warning.includes('honeypot')) {
-      return {
-        type: TokenWarningType.HONEYPOT,
-        severity: 'high',
-        message: warning
-      };
-    }
-    if (warning.includes('High buy tax') || warning.includes('High sell tax')) {
-      return {
-        type: TokenWarningType.HIGH_TAX,
-        severity: 'high',
-        message: warning
-      };
-    }
-    if (warning.includes('ownership not renounced')) {
-      return {
-        type: TokenWarningType.OWNERSHIP_NOT_RENOUNCED,
-        severity: 'medium',
-        message: warning
-      };
-    }
-    if (warning.includes('concentration')) {
-      return {
-        type: TokenWarningType.HIGH_CONCENTRATION,
-        severity: 'medium',
-        message: warning
-      };
-    }
-    if (warning.includes('Low number of holders')) {
-      return {
-        type: TokenWarningType.LOW_HOLDERS,
-        severity: 'low',
-        message: warning
-      };
-    }
+  private mapWarningType(warning: any): TokenWarning {
     return {
-      type: TokenWarningType.UNKNOWN,
-      severity: 'medium',
-      message: warning
+      type: warning.type,
+      severity: warning.severity,
+      message: warning.message,
+      details: warning.details
     };
   }
 }

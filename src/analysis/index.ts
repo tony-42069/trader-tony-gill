@@ -1,14 +1,19 @@
-import { SolanaClientImpl } from '../utils/solana/client';
+import { SolanaClient } from '../utils/solana/types';
+import { RaydiumClient } from '../utils/raydium/types';
+import { TokenAnalyzer } from './types';
 import { TokenAnalyzerImpl } from './analyzer';
 import { logger } from '../utils/logger';
 
 export * from './types';
 export * from './analyzer';
 
-export const createTokenAnalyzer = (solanaClient: SolanaClientImpl) => {
+export function createTokenAnalyzer(
+  solanaClient: SolanaClient,
+  raydiumClient: RaydiumClient
+): TokenAnalyzer {
   logger.info('Initializing token analyzer');
-  return new TokenAnalyzerImpl(solanaClient);
-};
+  return new TokenAnalyzerImpl(solanaClient, raydiumClient);
+}
 
 // Create error types for the analysis module
 export class TokenAnalysisError extends Error {

@@ -5,12 +5,16 @@ import {
   buyKeyboard,
   getWelcomeMessage,
   getSuccessMessage,
-  getErrorMessage 
+  getErrorMessage,
+  getMainKeyboard,
+  getBuyKeyboard
 } from '../ui';
 import { createAnalyzeCommand } from './analyze';
 import { createSnipeCommand, handleSnipeCallback } from './snipe';
 import { createMonitorCommand, handleMonitorCallback } from './monitor';
 import { TransactionHistory } from '../../utils/wallet/types';
+import { WelcomeMessageData } from '../ui/types';
+import { logger } from '../../utils/logger';
 
 const createHandler = (
   bot: TelegramBot,
@@ -28,17 +32,14 @@ export const createStartCommand = (bot: TelegramBot, context: BotContext): Comma
   handler: createHandler(bot, context, async (msg: TelegramBot.Message, _args: string[]) => {
     const chatId = msg.chat.id.toString();
 
-    const welcomeData = {
-      walletAddress: context.walletManager.getPublicKey().toString(),
-      balance: await context.walletManager.getBalance() / 1e9,
-      orderCount: 0,
-      securityStatus: '🔒 Secure'
+    const welcomeData: WelcomeMessageData = {
+      username: context.message?.from?.username || 'User',
+      version: process.env.npm_package_version || '1.0.0',
+      network: context.config.network || 'mainnet-beta'
     };
 
-    // Send single welcome message with menu
     await bot.sendMessage(chatId, getWelcomeMessage(welcomeData), {
-      parse_mode: 'Markdown',
-      disable_web_page_preview: true,
+      parse_mode: 'HTML',
       reply_markup: mainKeyboard
     });
   })
@@ -134,6 +135,16 @@ export const handleCallbacks = {
   snipe: handleSnipeCallback,
   monitor: handleMonitorCallback
 };
+
 export * from './analyze';
 export * from './snipe';
 export * from './monitor';
+
+export async function handleBuy(bot: TelegramBot, chatId: string, context: BotContext) {
+  await bot.sendMessage(chatId, 'Choose a buy option:', {
+    parse_mode: 'HTML',
+    reply_markup: {
+      inline_keyboard: getBuyKeyboard()
+    }
+  });
+}

@@ -8,6 +8,9 @@ import { MEVProtector } from './mev';
 import { GasOptimizerImpl } from './gas';
 import { RaydiumClient } from '../../utils/raydium/client';
 import { BN } from 'bn.js';
+import { SolanaClientImpl } from '../../utils/solana/client';
+import { TradingConfig } from '../../utils/trading/config';
+import { Wallet } from '../../utils/wallet/wallet';
 
 export class SniperServiceImpl implements SniperService {
   private mevProtector: MEVProtector;
@@ -16,12 +19,17 @@ export class SniperServiceImpl implements SniperService {
   private monitoringInterval: NodeJS.Timeout | null = null;
   private pendingSnipes: Map<string, SnipeConfig> = new Map();
   private lastKnownStates: Map<string, { liquidity: number; timestamp: number }> = new Map();
+  private readonly SANDWICH_THRESHOLD = 0.02; // 2% price impact threshold
+  private readonly MAX_PRIORITY_FEE = 0.000001; // Maximum priority fee in SOL
 
   constructor(
     private connection: Connection,
     private tokenAnalyzer: TokenAnalyzerImpl,
     private walletManager: WalletManagerImpl,
-    private raydiumProgramId: PublicKey
+    private raydiumProgramId: PublicKey,
+    private solanaClient: SolanaClientImpl,
+    private wallet: Wallet,
+    private config: TradingConfig
   ) {
     this.mevProtector = new MEVProtector(connection);
     this.gasOptimizer = new GasOptimizerImpl(connection);
@@ -371,5 +379,232 @@ export class SniperServiceImpl implements SniperService {
       logger.error('Failed to cancel transaction:', error);
       return false;
     }
+  }
+
+  async detectMEV(tokenAddress: string): Promise<MEVAnalysis> {
+    try {
+      // Get recent transactions for the token's pool
+      const pool = await this.raydiumClient.getPool(tokenAddress);
+      if (!pool) {
+        throw new Error('No liquidity pool found for token');
+      }
+
+      const poolAddress = pool.address;
+      const recentTxs = await this.solanaClient.getRecentTransactions(poolAddress);
+
+      // Analyze transaction patterns
+      const sandwichPatterns = this.analyzeSandwichPatterns(recentTxs);
+      const frontRunningAttempts = this.analyzeFrontRunning(recentTxs);
+      const backRunningAttempts = this.analyzeBackRunning(recentTxs);
+
+      // Calculate risk metrics
+      const mevRisk = this.calculateMEVRisk({
+        sandwichPatterns,
+        frontRunningAttempts,
+        backRunningAttempts
+      });
+
+      return {
+        risk: mevRisk,
+        sandwichDetected: sandwichPatterns.length > 0,
+        frontRunningDetected: frontRunningAttempts.length > 0,
+        backRunningDetected: backRunningAttempts.length > 0,
+        recentMEVTransactions: sandwichPatterns.length + frontRunningAttempts.length + backRunningAttempts.length,
+        averagePriceImpact: this.calculateAveragePriceImpact(sandwichPatterns),
+        recommendations: this.generateMEVRecommendations(mevRisk)
+      };
+    } catch (error) {
+      logger.error('MEV detection failed:', {
+        token: tokenAddress,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  async protectFromMEV(tokenAddress: string, amount: number): Promise<MEVProtection> {
+    try {
+      // Analyze current MEV risk
+      const mevAnalysis = await this.detectMEV(tokenAddress);
+
+      // Calculate optimal transaction parameters
+      const priorityFee = this.calculateOptimalPriorityFee(mevAnalysis);
+      const slippage = this.calculateOptimalSlippage(mevAnalysis, amount);
+      const delay = this.calculateOptimalDelay(mevAnalysis);
+
+      // Generate protection strategy
+      const strategy: MEVProtection = {
+        priorityFee: Math.min(priorityFee, this.MAX_PRIORITY_FEE),
+        recommendedSlippage: slippage,
+        recommendedDelay: delay,
+        protectionEnabled: true,
+        riskLevel: mevAnalysis.risk,
+        warnings: this.generateProtectionWarnings(mevAnalysis)
+      };
+
+      return strategy;
+    } catch (error) {
+      logger.error('MEV protection setup failed:', {
+        token: tokenAddress,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  private analyzeSandwichPatterns(transactions: Transaction[]): SandwichPattern[] {
+    const patterns: SandwichPattern[] = [];
+    const txWindow = 3; // Look at groups of 3 transactions
+
+    for (let i = 0; i < transactions.length - txWindow; i++) {
+      const txGroup = transactions.slice(i, i + txWindow);
+      
+      // Check for buy-target-sell pattern
+      if (
+        this.isBuyTransaction(txGroup[0]) &&
+        this.isSellTransaction(txGroup[2]) &&
+        this.calculatePriceImpact(txGroup[1]) > this.SANDWICH_THRESHOLD
+      ) {
+        patterns.push({
+          buyTx: txGroup[0],
+          targetTx: txGroup[1],
+          sellTx: txGroup[2],
+          priceImpact: this.calculatePriceImpact(txGroup[1])
+        });
+      }
+    }
+
+    return patterns;
+  }
+
+  private analyzeFrontRunning(transactions: Transaction[]): Transaction[] {
+    return transactions.filter(tx => {
+      const nextTx = transactions[transactions.indexOf(tx) + 1];
+      return nextTx && 
+        this.isBuyTransaction(tx) &&
+        this.calculatePriceImpact(nextTx) > this.SANDWICH_THRESHOLD;
+    });
+  }
+
+  private analyzeBackRunning(transactions: Transaction[]): Transaction[] {
+    return transactions.filter(tx => {
+      const prevTx = transactions[transactions.indexOf(tx) - 1];
+      return prevTx && 
+        this.isSellTransaction(tx) &&
+        this.calculatePriceImpact(prevTx) > this.SANDWICH_THRESHOLD;
+    });
+  }
+
+  private calculateMEVRisk(analysis: {
+    sandwichPatterns: SandwichPattern[];
+    frontRunningAttempts: Transaction[];
+    backRunningAttempts: Transaction[];
+  }): MEVRiskLevel {
+    const totalIncidents = 
+      analysis.sandwichPatterns.length +
+      analysis.frontRunningAttempts.length +
+      analysis.backRunningAttempts.length;
+
+    if (totalIncidents === 0) return MEVRiskLevel.LOW;
+    if (totalIncidents <= 2) return MEVRiskLevel.MEDIUM;
+    return MEVRiskLevel.HIGH;
+  }
+
+  private calculateOptimalPriorityFee(analysis: MEVAnalysis): number {
+    // Base fee calculation based on risk level
+    const baseFee = 0.000001; // 1 lamport
+    const riskMultiplier = {
+      [MEVRiskLevel.LOW]: 1,
+      [MEVRiskLevel.MEDIUM]: 2,
+      [MEVRiskLevel.HIGH]: 3
+    }[analysis.risk];
+
+    return baseFee * riskMultiplier;
+  }
+
+  private calculateOptimalSlippage(analysis: MEVAnalysis, amount: number): number {
+    // Dynamic slippage based on risk and amount
+    const baseSlippage = 0.005; // 0.5%
+    const riskMultiplier = {
+      [MEVRiskLevel.LOW]: 1,
+      [MEVRiskLevel.MEDIUM]: 1.5,
+      [MEVRiskLevel.HIGH]: 2
+    }[analysis.risk];
+
+    // Increase slippage for larger amounts
+    const amountMultiplier = amount > 100 ? 1.5 : 1;
+
+    return baseSlippage * riskMultiplier * amountMultiplier;
+  }
+
+  private calculateOptimalDelay(analysis: MEVAnalysis): number {
+    // Delay in milliseconds based on risk level
+    const baseDelay = 500; // 500ms
+    const riskMultiplier = {
+      [MEVRiskLevel.LOW]: 1,
+      [MEVRiskLevel.MEDIUM]: 2,
+      [MEVRiskLevel.HIGH]: 3
+    }[analysis.risk];
+
+    return baseDelay * riskMultiplier;
+  }
+
+  private generateProtectionWarnings(analysis: MEVAnalysis): string[] {
+    const warnings: string[] = [];
+
+    if (analysis.sandwichDetected) {
+      warnings.push('Sandwich attacks detected in recent transactions');
+    }
+    if (analysis.frontRunningDetected) {
+      warnings.push('Front-running attempts detected');
+    }
+    if (analysis.backRunningDetected) {
+      warnings.push('Back-running attempts detected');
+    }
+    if (analysis.averagePriceImpact > this.SANDWICH_THRESHOLD) {
+      warnings.push(`High average price impact: ${(analysis.averagePriceImpact * 100).toFixed(2)}%`);
+    }
+
+    return warnings;
+  }
+
+  private generateMEVRecommendations(risk: MEVRiskLevel): string[] {
+    const recommendations: string[] = [
+      'Use a priority fee to compete with MEV bots',
+      'Set appropriate slippage tolerance'
+    ];
+
+    if (risk === MEVRiskLevel.HIGH) {
+      recommendations.push(
+        'Consider splitting large trades into smaller ones',
+        'Wait for lower MEV activity before trading'
+      );
+    }
+
+    return recommendations;
+  }
+
+  private calculateAveragePriceImpact(patterns: SandwichPattern[]): number {
+    if (patterns.length === 0) return 0;
+    const totalImpact = patterns.reduce((sum, pattern) => sum + pattern.priceImpact, 0);
+    return totalImpact / patterns.length;
+  }
+
+  private isBuyTransaction(tx: Transaction): boolean {
+    // Implement logic to determine if transaction is a buy
+    // This is a simplified check - should be enhanced based on actual transaction structure
+    return tx.instructions.some(ix => ix.programId.equals(this.raydiumClient.swapProgramId));
+  }
+
+  private isSellTransaction(tx: Transaction): boolean {
+    // Implement logic to determine if transaction is a sell
+    // This is a simplified check - should be enhanced based on actual transaction structure
+    return tx.instructions.some(ix => ix.programId.equals(this.raydiumClient.swapProgramId));
+  }
+
+  private calculatePriceImpact(tx: Transaction): number {
+    // Implement logic to calculate price impact of a transaction
+    // This is a simplified implementation - should be enhanced with actual price impact calculation
+    return 0.01; // 1% placeholder
   }
 }

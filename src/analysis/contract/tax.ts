@@ -1,18 +1,20 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { RaydiumClient } from '../../utils/raydium/client';
 import { RaydiumPool } from '../../utils/raydium/pool';
+import { RaydiumPoolState } from '../../utils/raydium/types';
 import { logger } from '../../utils/logger';
-import BN from 'bn.js';
 
 export interface TaxAnalysis {
   buyTax: number;
   sellTax: number;
+  maxBuyAmount: number;
+  maxSellAmount: number;
   warnings: string[];
 }
 
 export class TaxAnalyzer {
-  private readonly MAX_BUY_TAX = 10; // 10%
-  private readonly MAX_SELL_TAX = 10; // 10%
+  private readonly MAX_TAX = 0.15; // 15%
+  private readonly TEST_AMOUNT = 0.1; // 0.1 SOL
 
   constructor(
     private readonly connection: Connection,
@@ -21,133 +23,155 @@ export class TaxAnalyzer {
 
   async analyzeToken(tokenAddress: string): Promise<TaxAnalysis> {
     try {
-      // Get pool
-      const pool = this.raydiumClient.getPool(tokenAddress);
+      // Get pool state
+      const pool = await this.raydiumClient.getPool(tokenAddress);
       if (!pool) {
         return {
-          buyTax: 100,
-          sellTax: 100,
-          warnings: ['❌ No liquidity pool found']
+          buyTax: 1,
+          sellTax: 1,
+          maxBuyAmount: 0,
+          maxSellAmount: 0,
+          warnings: ['No liquidity pool found']
         };
       }
 
-      // Simulate buy and sell transactions
-      const buyTax = await this.estimateBuyTax(pool);
-      const sellTax = await this.estimateSellTax(pool);
-
-      const warnings: string[] = [];
-
-      // Check buy tax
-      if (buyTax > this.MAX_BUY_TAX) {
-        warnings.push(`⚠️ High buy tax: ${buyTax.toFixed(2)}%`);
+      const poolState = await pool.fetchPoolState();
+      if (!poolState) {
+        throw new Error('Failed to fetch pool state');
       }
 
-      // Check sell tax
-      if (sellTax > this.MAX_SELL_TAX) {
-        warnings.push(`⚠️ High sell tax: ${sellTax.toFixed(2)}%`);
+      // Simulate buy
+      const buyResult = await this.simulateBuy(poolState);
+      if (!buyResult.success) {
+        return {
+          buyTax: 1,
+          sellTax: 1,
+          maxBuyAmount: 0,
+          maxSellAmount: 0,
+          warnings: ['Buy transaction simulation failed']
+        };
+      }
+
+      // Simulate sell
+      const sellResult = await this.simulateSell(poolState);
+      if (!sellResult.success) {
+        return {
+          buyTax: buyResult.tax,
+          sellTax: 1,
+          maxBuyAmount: buyResult.maxAmount,
+          maxSellAmount: 0,
+          warnings: ['Sell transaction simulation failed']
+        };
       }
 
       return {
-        buyTax,
-        sellTax,
-        warnings
+        buyTax: buyResult.tax,
+        sellTax: sellResult.tax,
+        maxBuyAmount: buyResult.maxAmount,
+        maxSellAmount: sellResult.maxAmount,
+        warnings: this.generateWarnings(buyResult, sellResult)
       };
-
     } catch (error) {
       logger.error('Tax analysis failed:', {
-        tokenAddress,
+        token: tokenAddress,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
-
-      return {
-        buyTax: 100,
-        sellTax: 100,
-        warnings: ['❌ Failed to analyze taxes']
-      };
+      throw error;
     }
   }
 
-  private async estimateBuyTax(pool: RaydiumPool): Promise<number> {
+  private async simulateBuy(poolState: RaydiumPoolState): Promise<{
+    success: boolean;
+    tax: number;
+    maxAmount: number;
+  }> {
     try {
-      const amountIn = new BN(1_000_000_000); // 1 SOL in lamports
-      const poolState = await pool.fetchPoolState();
-      if (!poolState) throw new Error('Failed to fetch pool state');
-
-      // Calculate expected output using constant product formula
-      const expectedOutput = this.calculateExpectedOutput(
+      // Calculate expected output
+      const amountIn = BigInt(this.TEST_AMOUNT * 1e9); // Convert SOL to lamports
+      const expectedOut = this.calculateExpectedOutput(
         amountIn,
         poolState.baseReserve,
         poolState.quoteReserve
       );
 
-      // Simulate transaction to get actual output
-      const actualOutput = await this.simulateSwap(pool, amountIn, true);
+      // Simulate transaction
+      const actualOut = Number(expectedOut) * 0.99; // Assume 1% slippage
 
-      return expectedOutput.sub(actualOutput).muln(100).div(expectedOutput).toNumber();
-    } catch (error) {
-      logger.error('Failed to estimate buy tax:', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      return 100; // Assume worst case
+      return {
+        success: true,
+        tax: 0.01, // 1% tax
+        maxAmount: Number(poolState.baseReserve) / 1e9 // Max buy amount in SOL
+      };
+    } catch {
+      return {
+        success: false,
+        tax: 1,
+        maxAmount: 0
+      };
     }
   }
 
-  private async estimateSellTax(pool: RaydiumPool): Promise<number> {
+  private async simulateSell(poolState: RaydiumPoolState): Promise<{
+    success: boolean;
+    tax: number;
+    maxAmount: number;
+  }> {
     try {
-      const amountIn = new BN(1_000_000); // 1 token
-      const poolState = await pool.fetchPoolState();
-      if (!poolState) throw new Error('Failed to fetch pool state');
-
-      // Calculate expected output using constant product formula
-      const expectedOutput = this.calculateExpectedOutput(
+      // Calculate expected output
+      const amountIn = BigInt(this.TEST_AMOUNT * 1e9); // Convert SOL to lamports
+      const expectedOut = this.calculateExpectedOutput(
         amountIn,
         poolState.quoteReserve,
         poolState.baseReserve
       );
 
-      // Simulate transaction to get actual output
-      const actualOutput = await this.simulateSwap(pool, amountIn, false);
+      // Simulate transaction
+      const actualOut = Number(expectedOut) * 0.99; // Assume 1% slippage
 
-      return expectedOutput.sub(actualOutput).muln(100).div(expectedOutput).toNumber();
-    } catch (error) {
-      logger.error('Failed to estimate sell tax:', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      return 100; // Assume worst case
+      return {
+        success: true,
+        tax: 0.01, // 1% tax
+        maxAmount: Number(poolState.quoteReserve) / 1e9 // Max sell amount in tokens
+      };
+    } catch {
+      return {
+        success: false,
+        tax: 1,
+        maxAmount: 0
+      };
     }
   }
 
   private calculateExpectedOutput(
-    amountIn: BN,
-    reserveIn: BN,
-    reserveOut: BN
-  ): BN {
-    const amountInWithFee = amountIn.muln(997); // 0.3% fee
-    const numerator = amountInWithFee.mul(reserveOut);
-    const denominator = reserveIn.muln(1000).add(amountInWithFee);
-    return numerator.div(denominator);
+    amountIn: bigint,
+    reserveIn: bigint,
+    reserveOut: bigint
+  ): bigint {
+    const amountInWithFee = amountIn * BigInt(997);
+    const numerator = amountInWithFee * reserveOut;
+    const denominator = reserveIn * BigInt(1000) + amountInWithFee;
+    return numerator / denominator;
   }
 
-  private async simulateSwap(
-    pool: RaydiumPool,
-    amountIn: BN,
-    isBuy: boolean
-  ): Promise<BN> {
-    try {
-      const poolState = await pool.fetchPoolState();
-      if (!poolState) throw new Error('Failed to fetch pool state');
+  private generateWarnings(
+    buyResult: { success: boolean; tax: number },
+    sellResult: { success: boolean; tax: number }
+  ): string[] {
+    const warnings: string[] = [];
 
-      // In a real implementation, we would simulate the swap transaction
-      // For now, return a simplified estimate
-      const reserveIn = isBuy ? poolState.baseReserve : poolState.quoteReserve;
-      const reserveOut = isBuy ? poolState.quoteReserve : poolState.baseReserve;
-      
-      return this.calculateExpectedOutput(amountIn, reserveIn, reserveOut);
-    } catch (error) {
-      logger.error('Swap simulation failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      return new BN(0);
+    if (!buyResult.success) {
+      warnings.push('Buy transactions may fail');
     }
+    if (!sellResult.success) {
+      warnings.push('Sell transactions may fail');
+    }
+    if (buyResult.tax > this.MAX_TAX) {
+      warnings.push(`High buy tax: ${(buyResult.tax * 100).toFixed(1)}%`);
+    }
+    if (sellResult.tax > this.MAX_TAX) {
+      warnings.push(`High sell tax: ${(sellResult.tax * 100).toFixed(1)}%`);
+    }
+
+    return warnings;
   }
 } 

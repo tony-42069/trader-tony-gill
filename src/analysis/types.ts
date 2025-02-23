@@ -5,7 +5,7 @@ export interface TokenMetadata {
   name: string;
   symbol: string;
   decimals: number;
-  totalSupply: bigint;
+  totalSupply: number;
   holders: number;
   isVerified: boolean;
   createdAt: Date;
@@ -38,17 +38,12 @@ export interface TokenWarning {
 }
 
 export enum TokenWarningType {
-  HIGH_TAX = 'high_tax',
-  LOW_LIQUIDITY = 'low_liquidity',
-  SUSPICIOUS_HOLDERS = 'suspicious_holders',
-  UNVERIFIED_CONTRACT = 'unverified_contract',
-  HONEYPOT = 'honeypot',
-  OWNERSHIP_NOT_RENOUNCED = 'ownership_not_renounced',
-  MINT_ENABLED = 'mint_enabled',
-  BLACKLISTED = 'blacklisted',
-  HIGH_CONCENTRATION = 'high_concentration',
-  LOW_HOLDERS = 'low_holders',
-  UNKNOWN = 'unknown'
+  LOW_LIQUIDITY = 'LOW_LIQUIDITY',
+  HIGH_TAX = 'HIGH_TAX',
+  HONEYPOT = 'HONEYPOT',
+  UNVERIFIED_CONTRACT = 'UNVERIFIED_CONTRACT',
+  CENTRALIZED_OWNERSHIP = 'CENTRALIZED_OWNERSHIP',
+  SUSPICIOUS_HOLDERS = 'SUSPICIOUS_HOLDERS'
 }
 
 export interface TokenAnalysis {
@@ -72,4 +67,19 @@ export interface TokenAnalyzer {
   getTokenPrice(address: string | PublicKey): Promise<TokenPrice>;
   assessRisk(address: string | PublicKey): Promise<TokenRisk>;
   isValidToken(address: string | PublicKey): Promise<boolean>;
+}
+
+export interface FallbackTokenData {
+  address: string;
+  decimals: number;
+  supply: number;
+  holders: {
+    address: string;
+    amount: number;
+  }[];
+  metadata?: {
+    name?: string;
+    symbol?: string;
+    uri?: string;
+  };
 }

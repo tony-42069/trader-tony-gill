@@ -5,17 +5,26 @@ import { BN } from 'bn.js';
 export type BigNumber = InstanceType<typeof BN>;
 
 export interface RaydiumPoolState {
-  id: PublicKey;
-  baseMint: PublicKey;
-  quoteMint: PublicKey;
-  lpMint: PublicKey;
-  baseDecimals: number;
-  quoteDecimals: number;
-  baseReserve: BigNumber;
-  quoteReserve: BigNumber;
-  lpSupply: BigNumber;
-  startTime: BigNumber;
-  status: number;
+  // Pool info
+  baseToken: PublicKey;
+  quoteToken: PublicKey;
+  lpToken: PublicKey;
+  baseReserve: bigint;
+  quoteReserve: bigint;
+  lpSupply: bigint;
+
+  // Market data
+  price: number;
+  volume24h: number;
+  liquidity: number;
+  lastUpdated: Date;
+
+  // Pool settings
+  fees: {
+    tradeFee: number;
+    ownerTradeFee: number;
+    ownerWithdrawFee: number;
+  };
 }
 
 export interface RaydiumPoolConfig {
@@ -26,12 +35,11 @@ export interface RaydiumPoolConfig {
 }
 
 export interface SwapParams {
-  poolId: PublicKey;
-  amountIn: BigNumber;
-  minAmountOut: BigNumber;
-  isBaseInput: boolean;
+  tokenIn: PublicKey;
+  tokenOut: PublicKey;
+  amountIn: number;
+  minAmountOut: number;
   slippage: number;
-  walletPublicKey: PublicKey;  // User's wallet public key for transaction signing
 }
 
 export interface PoolStateChange {
@@ -69,4 +77,36 @@ export class RaydiumError extends Error {
     super(message);
     this.name = 'RaydiumError';
   }
+}
+
+export interface RaydiumPool {
+  address: PublicKey;
+  baseToken: PublicKey;
+  quoteToken: PublicKey;
+  lpToken: PublicKey;
+  fetchPoolState(): Promise<RaydiumPoolState>;
+}
+
+export interface RaydiumClient {
+  swapProgramId: PublicKey;
+  getPool(tokenAddress: string): Promise<RaydiumPool | null>;
+  createPool(baseToken: PublicKey, quoteToken: PublicKey): Promise<RaydiumPool>;
+  swap(params: SwapParams): Promise<string>;
+  addLiquidity(params: AddLiquidityParams): Promise<string>;
+  removeLiquidity(params: RemoveLiquidityParams): Promise<string>;
+}
+
+export interface AddLiquidityParams {
+  baseToken: PublicKey;
+  quoteToken: PublicKey;
+  baseAmount: number;
+  quoteAmount: number;
+  slippage: number;
+}
+
+export interface RemoveLiquidityParams {
+  pool: RaydiumPool;
+  lpAmount: number;
+  minBaseAmount: number;
+  minQuoteAmount: number;
 }

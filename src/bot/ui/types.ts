@@ -1,4 +1,5 @@
 import { SnipeResult } from '../../trading/sniper';
+import { InlineKeyboardMarkup, ReplyKeyboardMarkup } from '../types';
 
 export type KeyboardType = 'analyzing' | 'preparing' | 'executing' | 'success' | 'error';
 
@@ -34,18 +35,22 @@ export interface UserSettings {
   };
 }
 
-export interface KeyboardButton {
-  text: string;
-  callback_data: string;
-}
-
-export interface InlineKeyboardMarkup {
-  inline_keyboard: KeyboardButton[][];
-}
-
 export interface MessageOptions {
   chat_id: number | string;
   message_id?: number;
   parse_mode?: 'Markdown' | 'HTML';
-  reply_markup?: InlineKeyboardMarkup;
+  reply_markup?: InlineKeyboardMarkup | ReplyKeyboardMarkup;
+}
+
+export interface WelcomeMessageData {
+  username: string;
+  version: string;
+  network: string;
+}
+
+export interface SniperStatusData {
+  tokenAddress: string;
+  status: string;
+  progress?: number;
+  error?: string;
 }
