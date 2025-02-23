@@ -362,3 +362,164 @@ The system implements comprehensive error handling:
    - Optimize RPC calls
    - Batch operations
    - Monitor memory usage
+
+## 7. Telegram Bot Interface
+
+### Bot Architecture
+```typescript
+interface BotContext {
+  config: BotConfig;
+  solanaClient: SolanaClientImpl;
+  walletManager: WalletManagerImpl;
+  tokenAnalyzer: TokenAnalyzerImpl;
+  trader: TraderImpl;
+  monitoringService: MonitoringServiceImpl;
+  sniperService: SniperService;
+  positionManager: PositionManager;
+}
+```
+
+### Command System
+The bot implements a comprehensive command system with the following features:
+- Command routing with middleware support
+- Admin-only command restrictions
+- Rate limiting and cooldown periods
+- Error handling and logging
+- Formatted message responses
+
+### Available Commands
+
+#### Sniper Commands
+```
+/snipe <token_address> <amount> [options] - Snipe a token
+Options:
+  [slippage] - Maximum slippage percentage (default: 1.0)
+  [tp] - Take profit percentage
+  [sl] - Stop loss percentage
+Example: /snipe So1xxxxxx 0.1 1.5 50 20
+
+/stopsnipe <token_address> - Stop monitoring a token
+Example: /stopsnipe So1xxxxxx
+```
+
+#### Position Management
+```
+/positions - View all open positions
+/close <position_id> - Close a specific position
+/update <position_id> <tp|sl> <price> - Update take-profit or stop-loss
+Example: /update pos_123 tp 5.5
+```
+
+### Alert System
+The bot includes a sophisticated alert system that monitors:
+- Price movements (configurable thresholds)
+- Liquidity changes
+- Volume spikes
+- Contract changes
+- Risk level changes
+
+Alert messages are formatted with:
+- Clear visual indicators (emojis)
+- Precise numerical formatting
+- Timestamp information
+- Action buttons when applicable
+
+### Security Features
+- Admin-only command restrictions
+- Rate limiting per user
+- Input validation and sanitization
+- Transaction simulation before execution
+- Emergency stop functionality
+
+## 8. Position Management System
+
+### Position Types
+```typescript
+interface Position {
+  id: string;
+  type: PositionType;
+  status: PositionStatus;
+  tokenAddress: string;
+  poolAddress: string;
+  quoteMint: string;
+  tokenSymbol: string;
+  
+  // Entry data
+  entryPrice: number;
+  entryAmount: number;
+  entryValue: number;
+  entryTxHash: string;
+  entryTimestamp: Date;
+
+  // Current state
+  currentPrice: number;
+  currentValue: number;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+
+  // Risk management
+  takeProfit?: number;
+  stopLoss?: number;
+  trailingStop?: number;
+  trailingStopDistance?: number;
+}
+```
+
+### Position Monitoring
+The system continuously monitors positions for:
+- Price changes
+- Take-profit triggers
+- Stop-loss triggers
+- Trailing stop adjustments
+- Risk level changes
+
+### Risk Management Features
+- Automatic take-profit execution
+- Stop-loss protection
+- Trailing stop functionality
+- Position sizing recommendations
+- Risk-based position limits
+
+### Emergency Procedures
+- Emergency exit function
+- Slippage protection
+- Transaction failure handling
+- Network error recovery
+- State persistence
+
+## 9. Running the Bot
+
+### Starting the Bot
+```typescript
+// Create bot instance
+const bot = createBot(
+  config,
+  solanaClient,
+  walletManager,
+  tokenAnalyzer,
+  trader,
+  monitoringService,
+  sniperService,
+  positionManager
+);
+
+// Start bot
+await bot.start();
+```
+
+### Configuration
+Required environment variables in `.env`:
+```
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_ADMIN_CHAT_ID=your_chat_id
+RPC_ENDPOINT=your_rpc_endpoint
+WALLET_PRIVATE_KEY=your_private_key
+RAYDIUM_PROGRAM_ID=program_id
+```
+
+### Monitoring & Maintenance
+- Winston logging integration
+- Error tracking and reporting
+- Performance monitoring
+- State persistence
+- Automatic recovery procedures
