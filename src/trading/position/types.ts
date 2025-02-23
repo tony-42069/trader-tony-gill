@@ -4,8 +4,9 @@ import { BN } from 'bn.js';
 export enum PositionStatus {
   OPEN = 'open',
   CLOSED = 'closed',
-  PENDING = 'pending',
-  FAILED = 'failed'
+  TAKE_PROFIT_TRIGGERED = 'take_profit_triggered',
+  STOP_LOSS_TRIGGERED = 'stop_loss_triggered',
+  EMERGENCY_EXIT = 'emergency_exit'
 }
 
 export enum PositionType {
@@ -50,6 +51,8 @@ export interface Position {
   type: PositionType;
   status: PositionStatus;
   tokenAddress: string;
+  poolAddress: string;
+  quoteMint: string;
   tokenSymbol: string;
 
   // Entry data
@@ -86,6 +89,11 @@ export interface Position {
   tags: string[];
   notes?: string;
   lastUpdated: Date;
+
+  amount: number;
+  pnl: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface PositionUpdate {
@@ -128,4 +136,20 @@ export interface PositionManager {
   updateStopLoss(id: string, price: number): Promise<Position>;
   updateTakeProfit(id: string, price: number): Promise<Position>;
   updateTrailingStop(id: string, distance: number): Promise<Position>;
+
+  openPosition(params: {
+    tokenAddress: string;
+    amount: number;
+    entryPrice: number;
+    takeProfit?: number;
+    stopLoss?: number;
+  }): Promise<Position>;
+
+  emergencyExit(positionId: string): Promise<Position>;
+}
+
+export interface PositionMonitor {
+  startMonitoring(position: Position): Promise<void>;
+  stopMonitoring(positionId: string): Promise<void>;
+  updateTriggers(position: Position): Promise<void>;
 }

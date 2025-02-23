@@ -105,6 +105,14 @@ export interface SolanaTransaction {
   maxPriorityFeePerGas?: bigint;
 }
 
+export interface LiquidityEvent {
+  type: 'liquidity_added';
+  tokenAddress: string;
+  oldLiquidity: number;
+  newLiquidity: number;
+  timestamp: number;
+}
+
 export interface SniperService {
   snipe(config: SnipeConfig): Promise<SnipeResult>;
   
@@ -126,6 +134,10 @@ export interface SniperService {
   }>;
 
   cancelTransaction(signature: string): Promise<boolean>;
+
+  startMonitoring(config: SnipeConfig): Promise<void>;
+
+  stopMonitoring(tokenAddress: string): Promise<void>;
 }
 
 export interface MEVProtection {

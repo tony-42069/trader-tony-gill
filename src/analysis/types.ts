@@ -42,10 +42,13 @@ export enum TokenWarningType {
   LOW_LIQUIDITY = 'low_liquidity',
   SUSPICIOUS_HOLDERS = 'suspicious_holders',
   UNVERIFIED_CONTRACT = 'unverified_contract',
-  HONEYPOT_RISK = 'honeypot_risk',
+  HONEYPOT = 'honeypot',
   OWNERSHIP_NOT_RENOUNCED = 'ownership_not_renounced',
   MINT_ENABLED = 'mint_enabled',
-  BLACKLISTED = 'blacklisted'
+  BLACKLISTED = 'blacklisted',
+  HIGH_CONCENTRATION = 'high_concentration',
+  LOW_HOLDERS = 'low_holders',
+  UNKNOWN = 'unknown'
 }
 
 export interface TokenAnalysis {

@@ -5,7 +5,7 @@ import { BN } from 'bn.js';
 // Type alias for BN instance
 type BNType = InstanceType<typeof BN>;
 
-export interface HolderDistribution {
+export interface HolderAnalysis {
   totalHolders: number;
   topHolders: HolderInfo[];
   concentration: {
@@ -30,7 +30,7 @@ export interface HolderInfo {
 export class HolderAnalyzer {
   constructor(private connection: Connection) {}
 
-  async analyzeToken(tokenAddress: string | PublicKey): Promise<HolderDistribution> {
+  async analyzeToken(tokenAddress: string | PublicKey): Promise<HolderAnalysis> {
     const address = tokenAddress.toString();
     
     try {

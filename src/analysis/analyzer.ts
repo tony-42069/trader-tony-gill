@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, Connection } from '@solana/web3.js';
 import { SolanaClientImpl } from '../utils/solana/client';
 import { logger } from '../utils/logger';
 import {
@@ -12,13 +12,25 @@ import {
   AnalysisOptions
 } from './types';
 import { config } from '../config/settings';
+import { ContractAnalyzer } from './contract';
+import { RaydiumClient } from '../utils/raydium/client';
 
 export class TokenAnalyzerImpl implements TokenAnalyzer {
   private cache: Map<string, TokenAnalysis>;
   private readonly CACHE_TTL = 60 * 1000; // 1 minute
+  private contractAnalyzer: ContractAnalyzer;
 
-  constructor(private solanaClient: SolanaClientImpl) {
+  constructor(
+    private solanaClient: SolanaClientImpl,
+    private raydiumClient: RaydiumClient
+  ) {
     this.cache = new Map();
+    // Create a new Connection instance with confirmed commitment
+    const connection = new Connection(config.solana.rpcUrl, 'confirmed');
+    this.contractAnalyzer = new ContractAnalyzer(
+      connection,
+      raydiumClient
+    );
   }
 
   async analyzeToken(
@@ -167,21 +179,20 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
         });
       }
 
-      // TODO: Implement additional risk checks
-      // - Check for honeypot
-      // - Analyze holder distribution
-      // - Check ownership status
-      // - Calculate buy/sell taxes
+      // Perform contract analysis
+      const contractAnalysis = await this.contractAnalyzer.analyzeContract(tokenAddress);
 
-      // Calculate risk score (0-100)
-      const riskScore = this.calculateRiskScore(warnings);
+      // Add contract warnings
+      for (const warning of contractAnalysis.warnings) {
+        warnings.push(this.mapWarningType(warning));
+      }
 
       return {
-        score: riskScore,
-        buyTax: 0, // TODO: Implement tax calculation
-        sellTax: 0,
-        isHoneypot: false,
-        isRenounced: false,
+        score: contractAnalysis.riskScore,
+        buyTax: contractAnalysis.tax.buyTax,
+        sellTax: contractAnalysis.tax.sellTax,
+        isHoneypot: contractAnalysis.honeypot.isHoneypot,
+        isRenounced: contractAnalysis.ownership.isRenounced,
         warnings
       };
     } catch (error) {
@@ -204,24 +215,46 @@ export class TokenAnalyzerImpl implements TokenAnalyzer {
     }
   }
 
-  private calculateRiskScore(warnings: TokenWarning[]): number {
-    let score = 0;
-    
-    for (const warning of warnings) {
-      switch (warning.severity) {
-        case 'high':
-          score += 30;
-          break;
-        case 'medium':
-          score += 15;
-          break;
-        case 'low':
-          score += 5;
-          break;
-      }
+  private mapWarningType(warning: string): TokenWarning {
+    if (warning.includes('honeypot')) {
+      return {
+        type: TokenWarningType.HONEYPOT,
+        severity: 'high',
+        message: warning
+      };
     }
-
-    // Cap score at 100
-    return Math.min(score, 100);
+    if (warning.includes('High buy tax') || warning.includes('High sell tax')) {
+      return {
+        type: TokenWarningType.HIGH_TAX,
+        severity: 'high',
+        message: warning
+      };
+    }
+    if (warning.includes('ownership not renounced')) {
+      return {
+        type: TokenWarningType.OWNERSHIP_NOT_RENOUNCED,
+        severity: 'medium',
+        message: warning
+      };
+    }
+    if (warning.includes('concentration')) {
+      return {
+        type: TokenWarningType.HIGH_CONCENTRATION,
+        severity: 'medium',
+        message: warning
+      };
+    }
+    if (warning.includes('Low number of holders')) {
+      return {
+        type: TokenWarningType.LOW_HOLDERS,
+        severity: 'low',
+        message: warning
+      };
+    }
+    return {
+      type: TokenWarningType.UNKNOWN,
+      severity: 'medium',
+      message: warning
+    };
   }
 }
