@@ -2,16 +2,16 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { RaydiumClient } from './client';
 import { RaydiumPool } from './pool';
 import {
-  RaydiumError,
   RaydiumPoolState,
-  RaydiumPoolConfig,
   SwapParams,
-  SwapResult,
+  SwapResult
+} from './types';
+import {
+  RaydiumError,
   PoolStateChange,
-  PoolMonitorConfig,
   PoolStatus,
   BigNumber
-} from './types';
+} from './pool';
 
 // Raydium Program ID on Solana mainnet
 export const RAYDIUM_PROGRAM_ID = new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
@@ -28,14 +28,12 @@ export {
   RaydiumPool,
   RaydiumError,
   RaydiumPoolState,
-  RaydiumPoolConfig,
   SwapParams,
   SwapResult,
   PoolStateChange,
-  PoolMonitorConfig,
   PoolStatus,
   BigNumber
 };
 
 // Re-export BN for convenience
-export { BN } from 'bn.js';
+export { default as BN } from 'bn.js';

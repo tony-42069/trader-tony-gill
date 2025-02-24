@@ -1,12 +1,38 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { BN } from 'bn.js';
-import { RaydiumPoolState, PoolStateChange, PoolStatus, RaydiumError, BigNumber } from './types';
+import BN from 'bn.js';
+import { RaydiumPoolState } from './types';
+
+// Define missing types
+export interface PoolStateChange {
+  poolId: string;
+  baseReserveChange: number;
+  quoteReserveChange: number;
+  lpSupplyChange: number;
+  timestamp: number;
+}
+
+export enum PoolStatus {
+  Active = 1,
+  Disabled = 2
+}
+
+export class RaydiumError extends Error {
+  constructor(message: string, public code: string) {
+    super(message);
+    this.name = 'RaydiumError';
+  }
+}
+
+export type BigNumber = BN;
 
 export class RaydiumPool {
-  public readonly id: PublicKey;
+  public readonly poolId: PublicKey;
+  public readonly id: string;
   private _baseMint: PublicKey | null = null;
   private _quoteMint: PublicKey | null = null;
   private _lpMint: PublicKey | null = null;
+  private _baseDecimals: number = 0;
+  private _quoteDecimals: number = 0;
   public state: RaydiumPoolState | null = null;
   private monitoringInterval: NodeJS.Timeout | null = null;
 
@@ -15,7 +41,8 @@ export class RaydiumPool {
     poolId: PublicKey,
     private onStateChange?: (change: PoolStateChange) => void
   ) {
-    this.id = poolId;
+    this.poolId = poolId;
+    this.id = poolId.toString();
   }
 
   get baseMint(): PublicKey {
@@ -39,9 +66,17 @@ export class RaydiumPool {
     return this._lpMint;
   }
 
+  get baseDecimals(): number {
+    return this._baseDecimals;
+  }
+
+  get quoteDecimals(): number {
+    return this._quoteDecimals;
+  }
+
   async fetchPoolState(): Promise<RaydiumPoolState> {
     try {
-      const accountInfo = await this.connection.getAccountInfo(this.id);
+      const accountInfo = await this.connection.getAccountInfo(this.poolId);
       
       if (!accountInfo) {
         throw new RaydiumError('Pool account not found', 'POOL_NOT_FOUND');
@@ -110,10 +145,10 @@ export class RaydiumPool {
       const lpMint = new PublicKey(data.slice(offset, offset + 32));
       offset += 32;
 
-      const baseDecimals = data.readUInt8(offset);
+      this._baseDecimals = data.readUInt8(offset);
       offset += 1;
 
-      const quoteDecimals = data.readUInt8(offset);
+      this._quoteDecimals = data.readUInt8(offset);
       offset += 1;
 
       const baseReserve = new BN(data.slice(offset, offset + 8), 'le');
@@ -177,7 +212,7 @@ export class RaydiumPool {
     );
 
     return {
-      poolId: this.id.toString(),
+      poolId: this.id,
       baseReserveChange,
       quoteReserveChange,
       lpSupplyChange,
@@ -226,5 +261,13 @@ export class RaydiumPool {
       baseReserve: state.baseReserve,
       quoteReserve: state.quoteReserve
     };
+  }
+
+  // Added to match the RaydiumPool interface in types.ts
+  async getState(): Promise<RaydiumPoolState> {
+    if (!this.state) {
+      return this.fetchPoolState();
+    }
+    return this.state;
   }
 }

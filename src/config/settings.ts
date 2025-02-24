@@ -19,7 +19,7 @@ if (!process.env.SOLANA_RPC_URL) {
 export const config: Config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId: process.env.TELEGRAM_CHAT_ID || '',
+    adminChatId: process.env.ADMIN_CHAT_ID || '',
     allowedUsers: (process.env.TELEGRAM_ALLOWED_USERS || '').split(',').filter(Boolean)
   },
   solana: {
@@ -27,12 +27,10 @@ export const config: Config = {
     walletId: process.env.SOLANA_WALLET_ID || '',
     seedPhrase: process.env.SOLANA_SEED_PHRASE || '',
     network: (process.env.SOLANA_NETWORK || 'devnet') as 'mainnet-beta' | 'testnet' | 'devnet',
-    commitment: 'confirmed' as const,
+    commitment: 'confirmed',
   },
   raydium: {
-    programId: process.env.RAYDIUM_PROGRAM_ID || '',
-    defaultSlippage: 1.0,
-    priorityFee: 0.000001
+    programId: process.env.RAYDIUM_PROGRAM_ID || '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',
   },
   trading: {
     maxSlippage: 1.0,
@@ -43,6 +41,9 @@ export const config: Config = {
     maxBuyAmount: 10,
     defaultAmount: 0.1,
     balanceThresholds: {
+      minimum: 0.1,
+      warning: 0.5,
+      maximum: 10,
       minSol: 0.1,
       minUsdc: 10,
       warningThreshold: 0.5

@@ -1,80 +1,52 @@
-export interface TokenMetadata {
-  address: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  totalSupply: bigint;
-  verified: boolean;
-  holders: number;
-}
-
 export interface TokenPrice {
-  current: number;
-  change24h: number;
-  volume24h: number;
-  liquidity: number;
-  lastUpdated: Date;
   price: number;
   priceChange24h: number;
+  volume24h: number;
   marketCap: number;
+  liquidity: number;
+  lastUpdated: Date;
 }
 
 export interface TokenRisk {
+  isHoneypot: boolean;
+  buyTax: number;
+  sellTax: number;
+  isRenounced: boolean;
+  warnings: string[];
   score: number;
   honeypotRisk: number;
   taxRisk: number;
   holdersRisk: number;
-  warnings: string[];
   lastUpdated: Date;
-  buyTax: number;
-  sellTax: number;
-  isHoneypot: boolean;
-  isRenounced: boolean;
 }
 
-export interface HoneypotAnalysis {
-  isHoneypot: boolean;
-  buyTax: number;
-  sellTax: number;
-  maxBuyAmount: number;
-  maxSellAmount: number;
-  warnings: string[];
+export interface TokenMetadata {
+  name: string;
+  symbol: string;
+  decimals: number;
+  totalSupply: bigint;
+  holders: number;
+  verified: boolean;
+  isVerified?: boolean;
+  address?: string;
 }
 
-export interface TaxAnalysis {
-  buyTax: number;
-  sellTax: number;
-  maxBuyAmount: number;
-  maxSellAmount: number;
-  warnings: string[];
+export interface ContractAnalysis {
+  risk: TokenRisk;
+  metadata: TokenMetadata;
 }
 
-export interface HolderAnalysis {
-  totalHolders: number;
-  topHolders: HolderInfo[];
-  concentration: {
-    top10Percent: number;
-    top50Percent: number;
-    top100Percent: number;
-  };
-  circulatingSupply: bigint;
-  details?: string;
-  warnings: string[];
-  topHolderPercentage: number;
+export enum RiskLevel {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  CRITICAL = 'CRITICAL'
 }
 
-export interface HolderInfo {
-  address: string;
-  balance: bigint;
-  percentage: number;
-  isContract: boolean;
-  isLocked: boolean;
-}
-
-export interface OwnershipAnalysis {
-  ownerAddress: string;
-  isRenounced: boolean;
-  warnings: string[];
+export interface RiskScore {
+  level: RiskLevel;
+  score: number;
+  factors: string[];
 }
 
 export type TokenWarning = string;

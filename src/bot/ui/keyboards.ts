@@ -1,6 +1,6 @@
-import { InlineKeyboard } from './types';
+import { InlineKeyboardMarkup } from '../types';
 
-export const mainKeyboard: InlineKeyboard = {
+export const mainKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '💰 Buy', callback_data: 'buy' },
@@ -24,7 +24,7 @@ export const mainKeyboard: InlineKeyboard = {
   ]
 };
 
-export const sniperTonyKeyboard: InlineKeyboard = {
+export const sniperTonyKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '🎯 Launch Sniper', callback_data: 'new_snipe' }
@@ -47,7 +47,7 @@ export const sniperTonyKeyboard: InlineKeyboard = {
   ]
 };
 
-export const buyKeyboard: InlineKeyboard = {
+export const buyKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '🎯 SniperTony Buy', callback_data: 'sniper_buy' },
@@ -67,7 +67,7 @@ export const buyKeyboard: InlineKeyboard = {
   ]
 };
 
-export const sniperSettingsKeyboard: InlineKeyboard = {
+export const sniperSettingsKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '🎯 Sniper Mode', callback_data: 'sniper_mode' },
@@ -91,7 +91,7 @@ export const sniperSettingsKeyboard: InlineKeyboard = {
   ]
 };
 
-export const monitorKeyboard: InlineKeyboard = {
+export const monitorKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '📊 Token Monitor', callback_data: 'token_monitor' },

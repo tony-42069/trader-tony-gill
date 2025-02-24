@@ -1,6 +1,6 @@
-import { KeyboardLayout } from './types';
+import { InlineKeyboardMarkup } from './types';
 
-export const mainMenuKeyboard: KeyboardLayout = {
+export const mainMenuKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '💰 Wallet', callback_data: 'wallet' },
@@ -16,7 +16,7 @@ export const mainMenuKeyboard: KeyboardLayout = {
   ]
 };
 
-export const walletKeyboard: KeyboardLayout = {
+export const walletKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '💵 Balance', callback_data: 'wallet_balance' },
@@ -29,7 +29,7 @@ export const walletKeyboard: KeyboardLayout = {
   ]
 };
 
-export const snipeKeyboard: KeyboardLayout = {
+export const snipeKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '🚀 Quick Snipe', callback_data: 'snipe_quick' },
@@ -42,7 +42,7 @@ export const snipeKeyboard: KeyboardLayout = {
   ]
 };
 
-export const monitorKeyboard: KeyboardLayout = {
+export const monitorKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '👀 View Monitored', callback_data: 'monitor_view' },
@@ -55,7 +55,7 @@ export const monitorKeyboard: KeyboardLayout = {
   ]
 };
 
-export const settingsKeyboard: KeyboardLayout = {
+export const settingsKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '⚙️ Trading', callback_data: 'settings_trading' },
@@ -68,7 +68,7 @@ export const settingsKeyboard: KeyboardLayout = {
   ]
 };
 
-export const confirmationKeyboard: KeyboardLayout = {
+export const confirmationKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '✅ Confirm', callback_data: 'confirm' },
@@ -77,7 +77,7 @@ export const confirmationKeyboard: KeyboardLayout = {
   ]
 };
 
-export const backKeyboard: KeyboardLayout = {
+export const backKeyboard: InlineKeyboardMarkup = {
   inline_keyboard: [
     [
       { text: '⬅️ Back', callback_data: 'main_menu' }

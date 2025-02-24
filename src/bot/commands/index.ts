@@ -5,9 +5,7 @@ import {
   buyKeyboard,
   getWelcomeMessage,
   getSuccessMessage,
-  getErrorMessage,
-  getMainKeyboard,
-  getBuyKeyboard
+  getErrorMessage
 } from '../ui';
 import { createAnalyzeCommand } from './analyze';
 import { createSnipeCommand, handleSnipeCallback } from './snipe';
@@ -33,7 +31,11 @@ export const createStartCommand = (bot: TelegramBot, context: BotContext): Comma
     const chatId = msg.chat.id.toString();
 
     const welcomeData: WelcomeMessageData = {
-      username: context.message?.from?.username || 'User',
+      walletAddress: context.walletManager?.getPublicKey()?.toString() || 'Not connected',
+      balance: await context.walletManager?.getBalance() / 1e9 || 0,
+      orderCount: 0,
+      securityStatus: 'Secure',
+      username: msg.from?.username || 'User',
       version: process.env.npm_package_version || '1.0.0',
       network: context.config.network || 'mainnet-beta'
     };
@@ -143,8 +145,6 @@ export * from './monitor';
 export async function handleBuy(bot: TelegramBot, chatId: string, context: BotContext) {
   await bot.sendMessage(chatId, 'Choose a buy option:', {
     parse_mode: 'HTML',
-    reply_markup: {
-      inline_keyboard: getBuyKeyboard()
-    }
+    reply_markup: buyKeyboard
   });
 }

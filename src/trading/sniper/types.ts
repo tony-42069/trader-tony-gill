@@ -1,81 +1,88 @@
-import { PublicKey, Transaction, TransactionInstruction, Signer } from '@solana/web3.js';
-import { TokenAnalysis } from '../../analysis/types';
+import { Connection, PublicKey, Transaction, TransactionInstruction, Signer } from '@solana/web3.js';
+import { TokenAnalyzer } from '../../analysis/types';
+import { WalletManager } from '../../utils/wallet/types';
 
-export enum SnipeErrorCode {
-  INVALID_TOKEN = 'invalid_token',
-  INSUFFICIENT_LIQUIDITY = 'insufficient_liquidity',
-  INSUFFICIENT_FUNDS = 'insufficient_funds',
-  HIGH_RISK = 'high_risk',
-  SANDWICH_DETECTED = 'sandwich_detected',
-  EXECUTION_FAILED = 'execution_failed',
-  TRANSACTION_FAILED = 'transaction_failed',
-  TIMEOUT = 'timeout',
-  MAX_RETRIES_EXCEEDED = 'max_retries_exceeded',
-  SIMULATION_FAILED = 'simulation_failed',
-  INVALID_PARAMS = 'invalid_params',
-  EXCESSIVE_SLIPPAGE = 'excessive_slippage',
-  HIGH_GAS_PRICE = 'high_gas_price',
-  LOW_LIQUIDITY = 'low_liquidity'
-}
-
-export interface SnipeConfig {
-  // Token settings
-  tokenAddress: string | PublicKey;
-  amount: number;
+export interface SniperConfig {
   maxSlippage: number;
-  quoteMint: string;
   minLiquidity: number;
-  maxRiskScore: number;
-  maxBuyAmount: number;
-
-  // Protection settings
-  sandwichProtection: boolean;
-  simulateFirst: boolean;
-  maxPendingTransactions: number;
+  priorityFee: number;
+  maxGasPrice: number;
+  computeUnits: number;
   maxBlockAge: number;
   retryAttempts: number;
-  usePrivatePool?: boolean;
-  emergencyExitEnabled?: boolean;
-  bundleTransactions?: boolean;
-
-  // Gas settings
-  priorityFee: number;
-  computeUnits: number;
-  maxGasPrice: number;
-
-  // Timing settings
+  simulateFirst: boolean;
+  sandwichProtection: boolean;
   maxExecutionTime: number;
   minConfirmations: number;
 }
 
-export interface SnipeResult {
-  // Transaction details
-  signature: string;
-  transactionHash: string;
-  status: 'success' | 'failed' | 'pending';
-  timestamp: Date;
-  success: boolean;
+export interface SniperParams {
+  tokenAddress: string;
+  amount: number;
+  slippage?: number;
+  priorityFee?: number;
+  waitForLiquidity?: boolean;
+  maxWaitTime?: number;
+  checkInterval?: number;
+  autoTakeProfit?: number;
+  autoStopLoss?: number;
+  mevProtection?: boolean;
+}
 
-  // Token details
+export interface SniperResult {
+  success: boolean;
   tokenAddress: string;
   amount: number;
   price: number;
-  slippage: number;
+  value: number;
+  transactionHash?: string;
+  signature?: string;
+  timestamp: number;
+  error?: string;
+  warnings?: string[];
+  analysis?: any;
+  fee?: number;
+  gas?: number;
+  executionTime?: number;
+  status: SniperStatus;
+}
 
-  // Gas details
-  fee: number;
-  priorityFee: number;
-  computeUnits: number;
+export enum SniperStatus {
+  PENDING = 'PENDING',
+  WAITING_FOR_LIQUIDITY = 'WAITING_FOR_LIQUIDITY',
+  SIMULATING = 'SIMULATING',
+  EXECUTING = 'EXECUTING',
+  CONFIRMING = 'CONFIRMING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
 
-  // Analysis
-  analysis: TokenAnalysis | null;
+export interface SniperService {
+  snipe(params: SniperParams): Promise<SniperResult>;
+  simulateSnipe(params: SniperParams): Promise<SniperResult>;
+  getEstimatedOutput(tokenAddress: string, amount: number): Promise<{
+    estimatedPrice: number;
+    estimatedOutput: number;
+    estimatedValue: number;
+    fee: number;
+  }>;
+  getTokenInfo(address: string | PublicKey): Promise<any>;
+  detectMEV(tokenAddress: string): Promise<MEVAnalysis>;
+  protectFromMEV(tokenAddress: string, amount: number): Promise<MEVProtection>;
+}
 
-  // Error details
-  error?: {
-    code: SnipeErrorCode;
-    message: string;
-    details?: any;
-  };
+export interface SolanaTransaction {
+  hash?: string;
+  from?: string;
+  to?: string;
+  value?: number;
+  gas?: number;
+  gasPrice?: number;
+  priorityFee?: number;
+  timestamp?: number;
+  blockNumber?: number;
+  instructions?: TransactionInstruction[];
+  signers?: Signer[];
 }
 
 export interface TransactionBundle {
@@ -83,102 +90,12 @@ export interface TransactionBundle {
   blockNumber: number;
   timestamp: number;
   config?: {
-    maxGasPrice: number;
-    priorityFee: number;
-    computeUnits: number;
-    maxBlockAge: number;
+    maxGasPrice?: number;
+    priorityFee?: number;
+    computeUnits?: number;
+    maxBlockAge?: number;
   };
 }
-
-export interface SolanaTransaction {
-  instructions: TransactionInstruction[];
-  signers: Signer[];
-  priorityFee?: number;
-  computeUnits?: number;
-  recentBlockhash?: string;
-  hash?: string;
-  from?: string;
-  to?: string;
-  value?: bigint;
-  gasPrice?: bigint;
-  maxFeePerGas?: bigint;
-  maxPriorityFeePerGas?: bigint;
-}
-
-export interface LiquidityEvent {
-  type: 'liquidity_added';
-  tokenAddress: string;
-  oldLiquidity: number;
-  newLiquidity: number;
-  timestamp: number;
-}
-
-export interface SniperService {
-  snipe(config: SnipeConfig): Promise<SnipeResult>;
-  
-  simulateSnipe(config: SnipeConfig): Promise<{
-    success: boolean;
-    error?: string;
-    estimatedGas: number;
-    estimatedPrice: number;
-  }>;
-
-  validateToken(address: string | PublicKey): Promise<{
-    valid: boolean;
-    analysis: TokenAnalysis | null;
-  }>;
-
-  getPendingTransactions(): Promise<{
-    count: number;
-    transactions: string[];
-  }>;
-
-  cancelTransaction(signature: string): Promise<boolean>;
-
-  startMonitoring(config: SnipeConfig): Promise<void>;
-
-  stopMonitoring(tokenAddress: string): Promise<void>;
-}
-
-export interface MEVProtection {
-  detectSandwich(
-    bundle: TransactionBundle
-  ): Promise<{
-    isSandwich: boolean;
-    frontRun?: SolanaTransaction;
-    backRun?: SolanaTransaction;
-  }>;
-
-  optimizeGas(
-    tokenAddress: string,
-    amount: number
-  ): Promise<{
-    priorityFee: number;
-    computeUnits: number;
-  }>;
-
-  bundleTransactions(
-    transactions: SolanaTransaction[]
-  ): Promise<TransactionBundle>;
-
-  submitToPrivatePool(
-    bundle: TransactionBundle
-  ): Promise<string[]>;
-}
-
-export interface GasOptimizer {
-  estimateGas(
-    transaction: SolanaTransaction
-  ): Promise<number>;
-
-  getPriorityFee(): Promise<number>;
-
-  getComputeUnits(
-    transaction: SolanaTransaction
-  ): Promise<number>;
-}
-
-export type SnipeParams = SnipeConfig;
 
 export enum MEVRiskLevel {
   LOW = 'LOW',
@@ -187,13 +104,23 @@ export enum MEVRiskLevel {
 }
 
 export interface MEVAnalysis {
-  risk: MEVRiskLevel;
-  sandwichDetected: boolean;
-  frontRunningDetected: boolean;
-  backRunningDetected: boolean;
-  recentMEVTransactions: number;
+  riskLevel: MEVRiskLevel;
+  sandwichPatterns: SandwichPattern[];
+  frontRunningAttempts: number;
+  backRunningAttempts: number;
   averagePriceImpact: number;
+  recentMEVActivity: boolean;
   recommendations: string[];
+  warnings: string[];
+  timestamp: number;
+}
+
+export interface SandwichPattern {
+  frontRun: SolanaTransaction;
+  targetTx: SolanaTransaction;
+  backRun: SolanaTransaction;
+  priceImpact: number;
+  timestamp: number;
 }
 
 export interface MEVProtection {
@@ -203,24 +130,51 @@ export interface MEVProtection {
   protectionEnabled: boolean;
   riskLevel: MEVRiskLevel;
   warnings: string[];
+  
+  detectSandwich(bundle: TransactionBundle): Promise<{
+    isSandwich: boolean;
+    frontRun?: SolanaTransaction;
+    backRun?: SolanaTransaction;
+  }>;
+  
+  optimizeGas(
+    tokenAddress: string,
+    amount: number
+  ): Promise<{
+    priorityFee: number;
+    computeUnits: number;
+  }>;
+  
+  bundleTransactions(
+    transactions: SolanaTransaction[]
+  ): Promise<TransactionBundle>;
+  
+  submitToPrivatePool(
+    bundle: TransactionBundle
+  ): Promise<string[]>;
+  
+  updateProtectionSettings(riskLevel: MEVRiskLevel): void;
 }
 
-export interface SandwichPattern {
-  buyTx: Transaction;
-  targetTx: Transaction;
-  sellTx: Transaction;
-  priceImpact: number;
+export interface GasOptimizer {
+  calculateOptimalGas(tokenAddress: string, amount: number): Promise<{
+    priorityFee: number;
+    computeUnits: number;
+  }>;
+  
+  getGasPrice(): Promise<number>;
+  
+  getRecommendedPriorityFee(tokenAddress: string): Promise<number>;
 }
 
-export interface MEVDetector {
-  detectMEV(tokenAddress: string): Promise<MEVAnalysis>;
-  protectFromMEV(tokenAddress: string, amount: number): Promise<MEVProtection>;
-}
-
-export interface MEVProtectionConfig {
-  enabled: boolean;
-  maxPriorityFee: number;
-  sandwichThreshold: number;
-  defaultSlippage: number;
-  minDelay: number;
+export interface SwapResult {
+  success: boolean;
+  tokenAddress: string;
+  amount: number;
+  amountIn: bigint;
+  amountOut: bigint;
+  price: number;
+  fee: bigint;
+  signature: string;
+  timestamp: number;
 }

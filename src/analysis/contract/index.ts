@@ -1,16 +1,17 @@
 import { Connection } from '@solana/web3.js';
-import { RaydiumClient } from '../../utils/raydium/client';
-import { HoneypotAnalyzer, HoneypotAnalysis } from './honeypot';
-import { OwnershipAnalyzer, OwnershipAnalysis } from './ownership';
-import { HolderAnalyzer, HolderAnalysis } from './holders';
-import { TaxAnalyzer, TaxAnalysis } from './tax';
+import { RaydiumClient } from '../../utils/raydium/types';
+import { HoneypotAnalyzer } from './honeypot';
+import { OwnershipAnalyzer } from './ownership';
+import { HolderAnalyzer } from './holders';
+import { TaxAnalyzer } from './tax';
+import { TokenRisk } from './types';
 
 export interface ContractAnalysis {
   riskScore: number;
-  honeypot: HoneypotAnalysis;
-  ownership: OwnershipAnalysis;
-  holders: HolderAnalysis;
-  tax: TaxAnalysis;
+  honeypot: TokenRisk;
+  ownership: TokenRisk;
+  holders: TokenRisk;
+  tax: TokenRisk;
   warnings: string[];
 }
 
@@ -24,10 +25,10 @@ export class ContractAnalyzer {
     connection: Connection,
     raydiumClient: RaydiumClient
   ) {
-    this.honeypotAnalyzer = new HoneypotAnalyzer(connection, raydiumClient);
+    this.honeypotAnalyzer = new HoneypotAnalyzer(raydiumClient);
     this.ownershipAnalyzer = new OwnershipAnalyzer(connection);
     this.holderAnalyzer = new HolderAnalyzer(connection);
-    this.taxAnalyzer = new TaxAnalyzer(connection, raydiumClient);
+    this.taxAnalyzer = new TaxAnalyzer(raydiumClient);
   }
 
   async analyzeContract(tokenAddress: string): Promise<ContractAnalysis> {
@@ -65,10 +66,10 @@ export class ContractAnalyzer {
   }
 
   private calculateRiskScore(analysis: {
-    honeypot: HoneypotAnalysis;
-    ownership: OwnershipAnalysis;
-    holders: HolderAnalysis;
-    tax: TaxAnalysis;
+    honeypot: TokenRisk;
+    ownership: TokenRisk;
+    holders: TokenRisk;
+    tax: TokenRisk;
   }): number {
     let score = 0;
 
@@ -89,7 +90,7 @@ export class ContractAnalyzer {
     }
 
     // Holder concentration risk (20% weight)
-    const topHolderPercentage = analysis.holders.topHolderPercentage;
+    const topHolderPercentage = analysis.holders.holdersRisk;
     score += Math.min(topHolderPercentage / 5, 20);
 
     return Math.min(score, 100);

@@ -43,14 +43,19 @@ export interface MessageOptions {
 }
 
 export interface WelcomeMessageData {
-  username: string;
-  version: string;
-  network: string;
+  walletAddress: string;
+  balance: number;
+  orderCount: number;
+  securityStatus: string;
+  username?: string;
+  version?: string;
+  network?: string;
 }
 
 export interface SniperStatusData {
-  tokenAddress: string;
   status: string;
-  progress?: number;
-  error?: string;
+  snipeCount: number;
+  successRate: number;
+  protectionStatus: string;
+  tokenAddress?: string; // Make optional
 }

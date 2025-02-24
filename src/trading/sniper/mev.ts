@@ -1,8 +1,16 @@
 import { Connection, PublicKey, Transaction, Signer } from '@solana/web3.js';
 import { logger } from '../../utils/logger';
-import { MEVProtection, TransactionBundle, SolanaTransaction } from './types';
+import { MEVProtection, TransactionBundle, SolanaTransaction, MEVRiskLevel } from './types';
 
 export class MEVProtector implements MEVProtection {
+  // Add required properties from MEVProtection interface
+  priorityFee: number = 0.000001;
+  recommendedSlippage: number = 1.0;
+  recommendedDelay: number = 2;
+  protectionEnabled: boolean = true;
+  riskLevel: MEVRiskLevel = MEVRiskLevel.LOW;
+  warnings: string[] = [];
+
   constructor(private connection: Connection) {}
 
   async detectSandwich(
@@ -89,8 +97,11 @@ export class MEVProtector implements MEVProtection {
         100000 + (amount * 1000) // Base + scaling factor
       );
 
+      // Update the priorityFee property
+      this.priorityFee = Math.max(avgFee * 1.2, 0.000001); // 20% above average
+
       return {
-        priorityFee: Math.max(avgFee * 1.2, 0.000001), // 20% above average
+        priorityFee: this.priorityFee,
         computeUnits: estimatedComputeUnits
       };
 
@@ -114,7 +125,7 @@ export class MEVProtector implements MEVProtection {
       timestamp: Date.now(),
       config: {
         maxGasPrice: 100000, // Default max gas price
-        priorityFee: 0.000001, // Default priority fee
+        priorityFee: this.priorityFee, // Use the class property
         computeUnits: 200000, // Default compute units
         maxBlockAge: 150 // Default block age threshold
       }
@@ -162,6 +173,37 @@ export class MEVProtector implements MEVProtection {
     }
   }
 
+  // Update MEV protection settings based on risk assessment
+  updateProtectionSettings(riskLevel: MEVRiskLevel): void {
+    this.riskLevel = riskLevel;
+    
+    switch (riskLevel) {
+      case MEVRiskLevel.HIGH:
+        this.recommendedSlippage = 2.0;
+        this.recommendedDelay = 5;
+        this.warnings = [
+          'High MEV risk detected',
+          'Consider increasing slippage tolerance',
+          'Consider delaying transaction execution'
+        ];
+        break;
+      case MEVRiskLevel.MEDIUM:
+        this.recommendedSlippage = 1.5;
+        this.recommendedDelay = 3;
+        this.warnings = [
+          'Medium MEV risk detected',
+          'Consider moderate slippage tolerance'
+        ];
+        break;
+      case MEVRiskLevel.LOW:
+      default:
+        this.recommendedSlippage = 1.0;
+        this.recommendedDelay = 2;
+        this.warnings = [];
+        break;
+    }
+  }
+
   private async analyzeSandwichPattern(
     frontRun: SolanaTransaction,
     targetTx: SolanaTransaction,
@@ -182,6 +224,8 @@ export class MEVProtector implements MEVProtection {
       frontPriorityFee > config.priorityFee * 1.5 ||
       backPriorityFee > config.priorityFee * 1.5
     ) {
+      // Update risk level and protection settings
+      this.updateProtectionSettings(MEVRiskLevel.HIGH);
       return true;
     }
 
@@ -194,6 +238,17 @@ export class MEVProtector implements MEVProtection {
         Number(backRun.hash?.slice(0, 8) || 0)
       ) < config.maxBlockAge;
 
-    return sameFrom || (sameValue && suspiciousTiming);
+    const isSandwich = sameFrom || (sameValue && suspiciousTiming);
+    
+    // Update risk level based on analysis
+    if (isSandwich) {
+      this.updateProtectionSettings(MEVRiskLevel.HIGH);
+    } else if (suspiciousTiming) {
+      this.updateProtectionSettings(MEVRiskLevel.MEDIUM);
+    } else {
+      this.updateProtectionSettings(MEVRiskLevel.LOW);
+    }
+    
+    return isSandwich;
   }
 }

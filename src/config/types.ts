@@ -1,15 +1,20 @@
+import { Commitment } from '@solana/web3.js';
+
 export interface SolanaConfig {
   rpcUrl: string;
   walletId: string;
   seedPhrase: string;
   network: 'mainnet-beta' | 'testnet' | 'devnet';
-  commitment: 'processed' | 'confirmed' | 'finalized';
+  commitment: Commitment;
 }
 
 export interface BalanceThresholds {
-  minSol: number;
-  minUsdc: number;
-  warningThreshold: number;
+  minimum: number;
+  warning: number;
+  maximum: number;
+  minSol?: number;
+  minUsdc?: number;
+  warningThreshold?: number;
 }
 
 export interface TradingConfig {
@@ -30,8 +35,10 @@ export interface TelegramConfig {
 }
 
 export interface BotConfig {
-  telegram: TelegramConfig;
-  allowedUsers: string[];
+  token: string;
+  adminChatId: string;
+  network: string;
+  allowedUsers?: string[];
 }
 
 export interface RiskConfig {
@@ -68,6 +75,10 @@ export interface BirdEyeConfig {
   apiKey: string;
 }
 
+export interface RaydiumConfig {
+  programId: string;
+}
+
 export interface Config {
   telegram: {
     botToken: string;
@@ -79,6 +90,10 @@ export interface Config {
     walletId: string;
     seedPhrase: string;
     network: 'mainnet-beta' | 'testnet' | 'devnet';
+    commitment?: Commitment;
+  };
+  raydium: {
+    programId: string;
   };
   trading: TradingConfig;
   risk: RiskConfig;

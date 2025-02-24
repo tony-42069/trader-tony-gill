@@ -6,7 +6,6 @@ import {
   AccountInfo, 
   ParsedAccountData, 
   TransactionResponse,
-  Commitment,
   VersionedTransaction,
   SendOptions,
   Signer
@@ -17,14 +16,15 @@ import {
   HealthCheckResult, 
   TokenAmount, 
   SolanaError, 
-  SolanaErrorCodes 
+  SolanaErrorCodes,
+  SolanaCommitment
 } from './types';
 
 export class SolanaClientImpl implements SolanaClient {
-  private readonly rpcConnection: Connection;
-  private readonly endpoint: string;
-  private commitment: Commitment = 'confirmed';
-  private readonly timeout: number;
+  readonly rpcConnection: Connection;
+  readonly endpoint: string;
+  commitment: SolanaCommitment = 'confirmed';
+  readonly timeout: number;
   private readonly maxRetries: number;
   private readonly priorityFee: number;
 
@@ -105,7 +105,7 @@ export class SolanaClientImpl implements SolanaClient {
     }
   }
 
-  withCommitment(commitment: Commitment): SolanaClient {
+  withCommitment(commitment: SolanaCommitment): SolanaClient {
     this.commitment = commitment;
     return this;
   }

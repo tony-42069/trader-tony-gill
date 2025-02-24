@@ -1,23 +1,10 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { logger } from '../../utils/logger';
 import { BN } from 'bn.js';
+import { TokenRisk } from './types';
 
 // Type alias for BN instance
 type BNType = InstanceType<typeof BN>;
-
-export interface HolderAnalysis {
-  totalHolders: number;
-  topHolders: HolderInfo[];
-  concentration: {
-    top10Percent: number;
-    top50Percent: number;
-    top100Percent: number;
-  };
-  circulatingSupply: BNType;
-  details?: string;
-  warnings: string[];
-  topHolderPercentage: number;
-}
 
 export interface HolderInfo {
   address: string;
@@ -30,7 +17,7 @@ export interface HolderInfo {
 export class HolderAnalyzer {
   constructor(private connection: Connection) {}
 
-  async analyzeToken(tokenAddress: string | PublicKey): Promise<HolderAnalysis> {
+  async analyzeToken(tokenAddress: string | PublicKey): Promise<TokenRisk> {
     const address = tokenAddress.toString();
     
     try {
@@ -59,15 +46,21 @@ export class HolderAnalyzer {
       }
 
       const topHolderPercentage = holders.length > 0 ? holders[0].percentage : 0;
+      
+      // Calculate risk score based on holder concentration
+      const holdersRisk = this.calculateHolderRisk(holders, concentration);
 
       return {
-        totalHolders: holders.length,
-        topHolders: holders.slice(0, 10), // Top 10 holders
-        concentration,
-        circulatingSupply,
-        details: this.generateDetails(holders, concentration, circulatingSupply, tokenSupply),
+        isHoneypot: false, // Not determined by holder analysis
+        buyTax: 0, // Not determined by holder analysis
+        sellTax: 0, // Not determined by holder analysis
+        isRenounced: false, // Not determined by holder analysis
         warnings,
-        topHolderPercentage
+        score: holdersRisk,
+        honeypotRisk: 0, // Not determined by holder analysis
+        taxRisk: 0, // Not determined by holder analysis
+        holdersRisk,
+        lastUpdated: new Date()
       };
 
     } catch (error) {
@@ -77,19 +70,67 @@ export class HolderAnalyzer {
       });
 
       return {
-        totalHolders: 0,
-        topHolders: [],
-        concentration: {
-          top10Percent: 0,
-          top50Percent: 0,
-          top100Percent: 0
-        },
-        circulatingSupply: new BN(0),
-        details: 'Failed to analyze holders: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        isHoneypot: false,
+        buyTax: 0,
+        sellTax: 0,
+        isRenounced: false,
         warnings: ['Analysis failed'],
-        topHolderPercentage: 0
+        score: 50, // Medium risk due to unknown status
+        honeypotRisk: 0,
+        taxRisk: 0,
+        holdersRisk: 50,
+        lastUpdated: new Date()
       };
     }
+  }
+
+  private calculateHolderRisk(
+    holders: HolderInfo[],
+    concentration: {
+      top10Percent: number;
+      top50Percent: number;
+      top100Percent: number;
+    }
+  ): number {
+    let risk = 0;
+    
+    // Risk based on number of holders
+    if (holders.length < 10) {
+      risk += 40;
+    } else if (holders.length < 50) {
+      risk += 30;
+    } else if (holders.length < 100) {
+      risk += 20;
+    } else if (holders.length < 500) {
+      risk += 10;
+    }
+    
+    // Risk based on top holder concentration
+    if (holders.length > 0) {
+      const topHolder = holders[0];
+      if (topHolder.percentage > 50) {
+        risk += 40;
+      } else if (topHolder.percentage > 30) {
+        risk += 30;
+      } else if (topHolder.percentage > 20) {
+        risk += 20;
+      } else if (topHolder.percentage > 10) {
+        risk += 10;
+      }
+    }
+    
+    // Risk based on top 10% concentration
+    if (concentration.top10Percent > 90) {
+      risk += 20;
+    } else if (concentration.top10Percent > 80) {
+      risk += 15;
+    } else if (concentration.top10Percent > 70) {
+      risk += 10;
+    } else if (concentration.top10Percent > 60) {
+      risk += 5;
+    }
+    
+    return Math.min(risk, 100);
   }
 
   private async getTokenSupply(tokenAddress: string): Promise<BNType> {
@@ -190,38 +231,5 @@ export class HolderAnalyzer {
       logger.error('Failed to calculate circulating supply:', error);
       return totalSupply;
     }
-  }
-
-  private generateDetails(
-    holders: HolderInfo[],
-    concentration: { top10Percent: number; top50Percent: number; top100Percent: number },
-    circulatingSupply: BNType,
-    totalSupply: BNType
-  ): string {
-    const details: string[] = [];
-
-    details.push(`Total Holders: ${holders.length}`);
-    details.push(`Circulating Supply: ${circulatingSupply.toString()} (${
-      circulatingSupply.muln(100).div(totalSupply).toNumber() / 100
-    }%)`);
-
-    details.push('\nConcentration:');
-    details.push(`Top 10% Holders: ${concentration.top10Percent}%`);
-    details.push(`Top 50% Holders: ${concentration.top50Percent}%`);
-
-    // Add warnings
-    if (holders.length < 100) {
-      details.push('\n⚠️ Low number of holders');
-    }
-
-    if (concentration.top10Percent > 80) {
-      details.push('⚠️ High concentration in top holders');
-    }
-
-    if (circulatingSupply.muln(100).div(totalSupply).toNumber() < 2000) {
-      details.push('⚠️ Low circulating supply');
-    }
-
-    return details.join('\n');
   }
 }

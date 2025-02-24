@@ -1,16 +1,11 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { logger } from '../../utils/logger';
-
-export interface OwnershipAnalysis {
-  isRenounced: boolean;
-  owner?: string;
-  warnings: string[];
-}
+import { TokenRisk } from './types';
 
 export class OwnershipAnalyzer {
   constructor(private readonly connection: Connection) {}
 
-  async analyzeToken(tokenAddress: string): Promise<OwnershipAnalysis> {
+  async analyzeToken(tokenAddress: string): Promise<TokenRisk> {
     try {
       const owner = await this.getTokenOwner(tokenAddress);
       const isRenounced = !owner;
@@ -24,9 +19,16 @@ export class OwnershipAnalyzer {
       }
 
       return {
+        isHoneypot: false, // Not determined by ownership analysis
+        buyTax: 0, // Not determined by ownership analysis
+        sellTax: 0, // Not determined by ownership analysis
         isRenounced,
-        owner,
-        warnings
+        warnings,
+        score: isRenounced ? 0 : 50, // Lower score is better
+        honeypotRisk: 0, // Not determined by ownership analysis
+        taxRisk: 0, // Not determined by ownership analysis
+        holdersRisk: 0, // Not determined by ownership analysis
+        lastUpdated: new Date()
       };
     } catch (error) {
       logger.error('Ownership analysis failed:', {
@@ -35,8 +37,16 @@ export class OwnershipAnalyzer {
       });
 
       return {
+        isHoneypot: false,
+        buyTax: 0,
+        sellTax: 0,
         isRenounced: false,
-        warnings: ['❌ Failed to analyze ownership']
+        warnings: ['❌ Failed to analyze ownership'],
+        score: 50, // Medium risk due to unknown status
+        honeypotRisk: 0,
+        taxRisk: 0,
+        holdersRisk: 0,
+        lastUpdated: new Date()
       };
     }
   }

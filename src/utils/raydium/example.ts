@@ -1,5 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { BN } from 'bn.js';
+import BN from 'bn.js';
 import { createRaydiumClient, RAYDIUM_PROGRAM_ID } from './index';
 
 async function swapExample() {
@@ -15,7 +15,9 @@ async function swapExample() {
       id: '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2',  // SOL/USDC pool
       baseMint: 'So11111111111111111111111111111111111111112',  // SOL
       quoteMint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',  // USDC
-      lpMint: '8HoQnePLqPj4M7PUDzfw8e3Ymdwgc7NLGnaTUapubyvu'  // LP token
+      lpMint: '8HoQnePLqPj4M7PUDzfw8e3Ymdwgc7NLGnaTUapubyvu',  // LP token
+      baseDecimals: 9,  // SOL has 9 decimals
+      quoteDecimals: 6   // USDC has 6 decimals
     };
 
     // Create and initialize pool
@@ -24,14 +26,17 @@ async function swapExample() {
     // Example wallet public key (replace with actual wallet)
     const walletPublicKey = new PublicKey('YourWalletPublicKeyHere');
 
+    if (!pool) {
+      throw new Error('Failed to create pool');
+    }
+
     // Prepare swap parameters (example: swap 0.1 SOL for USDC)
     const swapParams = {
-      poolId: new PublicKey(poolConfig.id),
-      amountIn: new BN('100000000'),  // 0.1 SOL (9 decimals)
-      minAmountOut: new BN('900000'),  // Minimum 0.9 USDC (6 decimals)
-      isBaseInput: true,  // We're inputting the base token (SOL)
-      slippage: 1.0,  // 1% slippage tolerance
-      walletPublicKey
+      tokenIn: new PublicKey(poolConfig.baseMint),
+      tokenOut: new PublicKey(poolConfig.quoteMint),
+      amountIn: BigInt('100000000'),  // 0.1 SOL (9 decimals)
+      amountOutMin: BigInt('900000'),  // Minimum 0.9 USDC (6 decimals)
+      pool
     };
 
     // Execute swap
@@ -39,8 +44,7 @@ async function swapExample() {
     const result = await client.swap(swapParams);
 
     console.log('Swap successful!');
-    console.log('Transaction signature:', result.signature);
-    console.log('Amount in:', result.amountIn.toString());
+    console.log('Success:', result.success);
     console.log('Amount out:', result.amountOut.toString());
     console.log('Price impact:', result.priceImpact.toFixed(2) + '%');
     console.log('Fee:', result.fee.toString());

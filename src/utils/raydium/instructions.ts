@@ -1,6 +1,6 @@
 import { PublicKey, TransactionInstruction, SystemProgram } from '@solana/web3.js';
-import { BN } from 'bn.js';
-import { BigNumber } from './types';
+import BN from 'bn.js';
+import { BigNumber } from './pool';
 import { Buffer } from 'buffer';
 
 // Constants

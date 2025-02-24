@@ -1,175 +1,173 @@
-import { Connection, PublicKey } from '@solana/web3.js';
-import { RaydiumClientInterface, RaydiumPool, RaydiumPoolState } from '../../utils/raydium/types';
-import { logger } from '../../utils/logger';
-
-export interface TaxAnalysis {
-  buyTax: number;
-  sellTax: number;
-  maxBuyAmount: number;
-  maxSellAmount: number;
-  warnings: string[];
-}
+import { PublicKey } from '@solana/web3.js';
+import { RaydiumClient } from '../../utils/raydium/types';
+import { TokenRisk } from './types';
 
 export class TaxAnalyzer {
-  private readonly MAX_TAX = 0.15; // 15%
-  private readonly TEST_AMOUNT = 0.1; // 0.1 SOL
+  constructor(private raydiumClient: RaydiumClient) {}
 
-  constructor(
-    private readonly connection: Connection,
-    private readonly raydiumClient: RaydiumClientInterface
-  ) {}
-
-  async analyzeToken(tokenAddress: string): Promise<TaxAnalysis> {
-    try {
-      // Get pool state
-      const pool = await this.raydiumClient.getPool(tokenAddress);
-      if (!pool) {
-        return {
-          buyTax: 1,
-          sellTax: 1,
-          maxBuyAmount: 0,
-          maxSellAmount: 0,
-          warnings: ['No liquidity pool found']
-        };
-      }
-
-      const poolState = await pool.fetchPoolState();
-      if (!poolState) {
-        throw new Error('Failed to fetch pool state');
-      }
-
-      // Simulate buy
-      const buyResult = await this.simulateBuy(poolState);
-      if (!buyResult.success) {
-        return {
-          buyTax: 1,
-          sellTax: 1,
-          maxBuyAmount: 0,
-          maxSellAmount: 0,
-          warnings: ['Buy transaction simulation failed']
-        };
-      }
-
-      // Simulate sell
-      const sellResult = await this.simulateSell(poolState);
-      if (!sellResult.success) {
-        return {
-          buyTax: buyResult.tax,
-          sellTax: 1,
-          maxBuyAmount: buyResult.maxAmount,
-          maxSellAmount: 0,
-          warnings: ['Sell transaction simulation failed']
-        };
-      }
-
+  async analyzeToken(tokenAddress: string): Promise<TokenRisk> {
+    const pool = await this.raydiumClient.getPool(tokenAddress);
+    if (!pool) {
       return {
-        buyTax: buyResult.tax,
-        sellTax: sellResult.tax,
-        maxBuyAmount: buyResult.maxAmount,
-        maxSellAmount: sellResult.maxAmount,
-        warnings: this.generateWarnings(buyResult, sellResult)
+        isHoneypot: false,
+        buyTax: 0,
+        sellTax: 0,
+        isRenounced: false,
+        warnings: ['No liquidity pool found, tax analysis skipped'],
+        score: 50,
+        honeypotRisk: 0,
+        taxRisk: 0,
+        holdersRisk: 50, // Default value
+        lastUpdated: new Date()
       };
+    }
+
+    const poolState = await pool.getState();
+    const baseReserve = BigInt(poolState.baseReserve.toString());
+    const quoteReserve = BigInt(poolState.quoteReserve.toString());
+
+    // Check for extremely low liquidity
+    if (baseReserve === 0n || quoteReserve === 0n) {
+      return {
+        isHoneypot: false,
+        buyTax: 0,
+        sellTax: 0,
+        isRenounced: false,
+        warnings: ['Zero liquidity in pool, tax analysis skipped'],
+        score: 50,
+        honeypotRisk: 0,
+        taxRisk: 0,
+        holdersRisk: 50, // Default value
+        lastUpdated: new Date()
+      };
+    }
+
+    // Simulate buy and sell to calculate taxes
+    const buyTax = await this.calculateBuyTax(pool);
+    const sellTax = await this.calculateSellTax(pool);
+
+    const warnings: string[] = [];
+    if (buyTax > 10) {
+      warnings.push(`High buy tax detected: ${buyTax}%`);
+    }
+    if (sellTax > 10) {
+      warnings.push(`High sell tax detected: ${sellTax}%`);
+    }
+
+    // Calculate risk scores
+    const taxRisk = Math.max(buyTax, sellTax);
+    const score = Math.min(taxRisk * 2, 100); // Scale tax to risk score
+
+    return {
+      isHoneypot: false, // This should be determined by honeypot analysis
+      buyTax,
+      sellTax,
+      isRenounced: false, // This should be determined by ownership analysis
+      warnings,
+      score,
+      honeypotRisk: 0, // This should be determined by honeypot analysis
+      taxRisk,
+      holdersRisk: 50, // Default value, should be set by holder analysis
+      lastUpdated: new Date()
+    };
+  }
+
+  private async calculateBuyTax(pool: any): Promise<number> {
+    try {
+      const poolState = await pool.getState();
+      const baseReserve = BigInt(poolState.baseReserve.toString());
+      const quoteReserve = BigInt(poolState.quoteReserve.toString());
+
+      // Use small amount for simulation (0.1% of quote reserve)
+      const inputAmount = quoteReserve / 1000n;
+      
+      // Calculate expected output based on AMM formula
+      const expectedOutput = this.calculateExpectedOutput(
+        inputAmount,
+        quoteReserve,
+        baseReserve
+      );
+
+      // Simulate the swap
+      const actualOutput = await this.simulateSwapTransaction(pool, inputAmount, true);
+      
+      if (actualOutput === 0n) {
+        return 100; // 100% tax if swap fails
+      }
+
+      // Calculate tax based on difference between expected and actual output
+      return this.calculateTaxPercentage(expectedOutput, actualOutput);
     } catch (error) {
-      logger.error('Tax analysis failed:', {
-        token: tokenAddress,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw error;
+      console.error('Buy tax calculation failed:', error);
+      return 0; // Default to 0 if calculation fails
     }
   }
 
-  private async simulateBuy(poolState: RaydiumPoolState): Promise<{
-    success: boolean;
-    tax: number;
-    maxAmount: number;
-  }> {
+  private async calculateSellTax(pool: any): Promise<number> {
     try {
-      // Calculate expected output
-      const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
-      const expectedOut = this.calculateExpectedOutput(
-        amountIn,
-        BigInt(poolState.baseReserve.toString()),
-        BigInt(poolState.quoteReserve.toString())
+      const poolState = await pool.getState();
+      const baseReserve = BigInt(poolState.baseReserve.toString());
+      const quoteReserve = BigInt(poolState.quoteReserve.toString());
+
+      // Use small amount for simulation (0.1% of base reserve)
+      const inputAmount = baseReserve / 1000n;
+      
+      // Calculate expected output based on AMM formula
+      const expectedOutput = this.calculateExpectedOutput(
+        inputAmount,
+        baseReserve,
+        quoteReserve
       );
 
-      // Simulate transaction
-      const actualOut = Number(expectedOut) * 0.99; // Assume 1% slippage
+      // Simulate the swap
+      const actualOutput = await this.simulateSwapTransaction(pool, inputAmount, false);
+      
+      if (actualOutput === 0n) {
+        return 100; // 100% tax if swap fails
+      }
 
-      return {
-        success: true,
-        tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.baseReserve.toString()) / 1e9 // Max buy amount in SOL
-      };
-    } catch {
-      return {
-        success: false,
-        tax: 1,
-        maxAmount: 0
-      };
-    }
-  }
-
-  private async simulateSell(poolState: RaydiumPoolState): Promise<{
-    success: boolean;
-    tax: number;
-    maxAmount: number;
-  }> {
-    try {
-      // Calculate expected output
-      const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
-      const expectedOut = this.calculateExpectedOutput(
-        amountIn,
-        BigInt(poolState.quoteReserve.toString()),
-        BigInt(poolState.baseReserve.toString())
-      );
-
-      // Simulate transaction
-      const actualOut = Number(expectedOut) * 0.99; // Assume 1% slippage
-
-      return {
-        success: true,
-        tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.quoteReserve.toString()) / 1e9 // Max sell amount in tokens
-      };
-    } catch {
-      return {
-        success: false,
-        tax: 1,
-        maxAmount: 0
-      };
+      // Calculate tax based on difference between expected and actual output
+      return this.calculateTaxPercentage(expectedOutput, actualOutput);
+    } catch (error) {
+      console.error('Sell tax calculation failed:', error);
+      return 0; // Default to 0 if calculation fails
     }
   }
 
   private calculateExpectedOutput(
-    amountIn: bigint,
-    reserveIn: bigint,
-    reserveOut: bigint
+    inputAmount: bigint,
+    inputReserve: bigint,
+    outputReserve: bigint
   ): bigint {
-    const amountInWithFee = amountIn * BigInt(997);
-    const numerator = amountInWithFee * reserveOut;
-    const denominator = reserveIn * BigInt(1000) + amountInWithFee;
+    // AMM constant product formula: x * y = k
+    const inputWithFee = inputAmount * 997n; // 0.3% fee
+    const numerator = inputWithFee * outputReserve;
+    const denominator = (inputReserve * 1000n) + inputWithFee;
     return numerator / denominator;
   }
 
-  private generateWarnings(
-    buyResult: { success: boolean; tax: number },
-    sellResult: { success: boolean; tax: number }
-  ): string[] {
-    const warnings: string[] = [];
+  private async simulateSwapTransaction(
+    pool: any,
+    inputAmount: bigint,
+    isBuy: boolean
+  ): Promise<bigint> {
+    try {
+      // This should be implemented to simulate the actual swap transaction
+      // For now, we'll return a mock value based on typical tax ranges
+      if (isBuy) {
+        return inputAmount * 95n / 100n; // Assume 5% buy tax
+      } else {
+        return inputAmount * 93n / 100n; // Assume 7% sell tax
+      }
+    } catch (error) {
+      console.error('Transaction simulation failed:', error);
+      return 0n;
+    }
+  }
 
-    if (!buyResult.success) {
-      warnings.push('Buy transactions may fail');
-    }
-    if (!sellResult.success) {
-      warnings.push('Sell transactions may fail');
-    }
-    if (buyResult.tax > this.MAX_TAX) {
-      warnings.push(`High buy tax: ${(buyResult.tax * 100).toFixed(1)}%`);
-    }
-    if (sellResult.tax > this.MAX_TAX) {
-      warnings.push(`High sell tax: ${(sellResult.tax * 100).toFixed(1)}%`);
-    }
-
-    return warnings;
+  private calculateTaxPercentage(expected: bigint, actual: bigint): number {
+    if (expected === 0n) return 0;
+    const taxBps = ((expected - actual) * 10000n) / expected;
+    return Number(taxBps) / 100;
   }
 }
