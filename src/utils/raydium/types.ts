@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { BN } from 'bn.js';
 
 // Type definition for BN instance
@@ -6,12 +6,12 @@ export type BigNumber = InstanceType<typeof BN>;
 
 export interface RaydiumPoolState {
   // Pool info
-  baseToken: PublicKey;
-  quoteToken: PublicKey;
-  lpToken: PublicKey;
-  baseReserve: bigint;
-  quoteReserve: bigint;
-  lpSupply: bigint;
+  baseMint: PublicKey;
+  quoteMint: PublicKey;
+  lpMint: PublicKey;
+  baseReserve: BigNumber;
+  quoteReserve: BigNumber;
+  lpSupply: BigNumber;
 
   // Market data
   price: number;
@@ -25,6 +25,7 @@ export interface RaydiumPoolState {
     ownerTradeFee: number;
     ownerWithdrawFee: number;
   };
+  status?: PoolStatus;
 }
 
 export interface RaydiumPoolConfig {
@@ -35,11 +36,12 @@ export interface RaydiumPoolConfig {
 }
 
 export interface SwapParams {
-  tokenIn: PublicKey;
-  tokenOut: PublicKey;
-  amountIn: number;
-  minAmountOut: number;
+  poolId: PublicKey;
+  amountIn: BigNumber;
+  minAmountOut: BigNumber;
+  isBaseInput: boolean;
   slippage: number;
+  walletPublicKey: PublicKey;
 }
 
 export interface PoolStateChange {
@@ -80,20 +82,37 @@ export class RaydiumError extends Error {
 }
 
 export interface RaydiumPool {
-  address: PublicKey;
-  baseToken: PublicKey;
-  quoteToken: PublicKey;
-  lpToken: PublicKey;
-  fetchPoolState(): Promise<RaydiumPoolState>;
+  id: PublicKey;
+  baseMint: PublicKey;
+  quoteMint: PublicKey;
+  lpMint: PublicKey;
+  state: RaydiumPoolState | null;
+  getState(): Promise<RaydiumPoolState>;
+  getReserves(): Promise<{ baseReserve: BigNumber; quoteReserve: BigNumber }>;
+  isActive(): boolean;
+  fetchPoolState(): Promise<RaydiumPoolState | null>;
 }
 
-export interface RaydiumClient {
-  swapProgramId: PublicKey;
-  getPool(tokenAddress: string): Promise<RaydiumPool | null>;
-  createPool(baseToken: PublicKey, quoteToken: PublicKey): Promise<RaydiumPool>;
-  swap(params: SwapParams): Promise<string>;
-  addLiquidity(params: AddLiquidityParams): Promise<string>;
-  removeLiquidity(params: RemoveLiquidityParams): Promise<string>;
+export interface RaydiumClientInterface {
+  readonly connection: Connection;
+  readonly programId: PublicKey;
+  
+  createPool(config: RaydiumPoolConfig): Promise<RaydiumPool>;
+  getPool(tokenAddress: string): Promise<RaydiumPool | undefined>;
+  getAllPools(): RaydiumPool[];
+  swap(params: SwapParams): Promise<SwapResult>;
+  calculateSwap(poolState: RaydiumPoolState, amountIn: BigNumber, isBaseInput: boolean): {
+    amountOut: BigNumber;
+    priceImpact: number;
+    fee: BigNumber;
+  };
+  calculatePriceImpact(
+    amountIn: BigNumber,
+    amountOut: BigNumber,
+    inputReserve: BigNumber,
+    outputReserve: BigNumber
+  ): number;
+  buildSwapTransaction(params: SwapParams, poolState: RaydiumPoolState): Promise<VersionedTransaction>;
 }
 
 export interface AddLiquidityParams {

@@ -1,4 +1,4 @@
-import { Connection, PublicKey, Transaction, TransactionSignature, AccountInfo, ParsedAccountData, TransactionResponse } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, TransactionSignature, AccountInfo, ParsedAccountData, TransactionResponse, Commitment } from '@solana/web3.js';
 import { LogContext } from '../logger';
 
 export interface TokenAmount {
@@ -9,6 +9,7 @@ export interface TokenAmount {
 }
 
 export interface SolanaClient {
+  getConnection: () => Connection;
   getLatestBlockhash: () => Promise<{ blockhash: string; lastValidBlockHeight: number }>;
   getBalance: (publicKey: PublicKey) => Promise<number>;
   sendAndConfirmTransaction: (transaction: Transaction) => Promise<TransactionSignature>;
@@ -60,11 +61,7 @@ export interface TransactionError extends Error {
   instruction?: number;
 }
 
-export enum SolanaCommitment {
-  PROCESSED = 'processed',
-  CONFIRMED = 'confirmed',
-  FINALIZED = 'finalized'
-}
+export type SolanaCommitment = Commitment;
 
 export enum SolanaErrorCodes {
   TRANSACTION_FAILED = 'TransactionFailed',

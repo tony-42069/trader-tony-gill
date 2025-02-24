@@ -3,9 +3,18 @@ import { BN } from 'bn.js';
 import { BigNumber } from './types';
 import { Buffer } from 'buffer';
 
+// Constants
+export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+
 // Raydium instruction discriminators
 export enum RaydiumInstruction {
+  Initialize = 0,
   Swap = 9,
+  DepositAllTokenTypes = 3,
+  WithdrawAllTokenTypes = 4,
+  DepositSingleTokenType = 5,
+  WithdrawSingleTokenType = 6,
 }
 
 // Account metas for swap instruction
@@ -35,7 +44,7 @@ export const createSwapInstruction = (
     { pubkey: accounts.userSourceToken, isSigner: false, isWritable: true },
     { pubkey: accounts.userDestinationToken, isSigner: false, isWritable: true },
     { pubkey: accounts.userOwner, isSigner: true, isWritable: false },
-    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Instruction data layout:
@@ -65,7 +74,7 @@ export const findPoolAuthorityPDA = async (
   );
 };
 
-// Helper function to derive token account address
+// Helper function to derive associated token account address
 export const findAssociatedTokenAddress = async (
   walletAddress: PublicKey,
   tokenMintAddress: PublicKey
@@ -73,9 +82,9 @@ export const findAssociatedTokenAddress = async (
   return PublicKey.findProgramAddressSync(
     [
       walletAddress.toBuffer(),
-      SystemProgram.programId.toBuffer(),
+      TOKEN_PROGRAM_ID.toBuffer(),
       tokenMintAddress.toBuffer(),
     ],
-    new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
+    ASSOCIATED_TOKEN_PROGRAM_ID
   )[0];
 };

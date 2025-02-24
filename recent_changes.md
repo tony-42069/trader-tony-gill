@@ -79,7 +79,7 @@ export const config = {
     seedPhrase: process.env.WALLET_SEED_PHRASE!
   },
   trading: {
-    maxSlippage: 1.0,
+    maxSlippage: 15.0,
     minLiquidity: 1000,
     takeProfit: 50.0,
     stopLoss: 20.0,
@@ -89,7 +89,7 @@ export const config = {
   },
   risk: {
     maxRiskScore: 70,
-    minHolders: 10,
+    minHolders: 100,
     maxBuyTax: 10.0,
     maxSellTax: 10.0,
     requireVerified: true,

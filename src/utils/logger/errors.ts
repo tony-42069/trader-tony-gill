@@ -1,61 +1,51 @@
-import type { LogContext } from './types';
+import { logger } from './logger';
+import { createLogContext } from './context';
 
-export const errorCodes = {
-  INITIALIZATION_ERROR: 'INIT_ERR',
-  TRADING_ERROR: 'TRADE_ERR',
-  SNIPE_ERROR: 'SNIPE_ERR',
-  WALLET_ERROR: 'WALLET_ERR',
-  RPC_ERROR: 'RPC_ERR',
-  VALIDATION_ERROR: 'VALIDATION_ERR',
-  NETWORK_ERROR: 'NETWORK_ERR',
-  UNKNOWN_ERROR: 'UNKNOWN_ERR'
-} as const;
-
-export type ErrorCode = typeof errorCodes[keyof typeof errorCodes];
-
-export class TraderError extends Error {
+export class TradingError extends Error {
   constructor(
     message: string,
-    public code: ErrorCode,
-    public metadata?: Record<string, any>
+    public readonly code: string,
+    public readonly metadata?: Record<string, any>
   ) {
     super(message);
-    this.name = 'TraderError';
-    
-    // Ensure proper prototype chain for instanceof checks
-    Object.setPrototypeOf(this, TraderError.prototype);
-  }
-
-  toJSON() {
-    return {
-      name: this.name,
-      message: this.message,
-      code: this.code,
-      metadata: this.metadata,
-      stack: this.stack
-    };
+    this.name = 'TradingError';
   }
 }
 
-export const logError = (context: LogContext, error: Error | TraderError) => {
-  const metadata = error instanceof TraderError ? error.metadata : {};
-  const errorCode = error instanceof TraderError ? error.code : errorCodes.UNKNOWN_ERROR;
+export class ValidationError extends TradingError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, 'VALIDATION_ERROR', metadata);
+    this.name = 'ValidationError';
+  }
+}
 
-  context.log('error', error.message, {
-    errorName: error.name,
-    errorCode,
-    stack: error.stack,
-    ...metadata,
-    timestamp: new Date().toISOString()
-  });
+export class NetworkError extends TradingError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, 'NETWORK_ERROR', metadata);
+    this.name = 'NetworkError';
+  }
+}
 
-  return error; // Allow for error chaining
-};
+export class ConfigurationError extends TradingError {
+  constructor(message: string, metadata?: Record<string, any>) {
+    super(message, 'CONFIGURATION_ERROR', metadata);
+    this.name = 'ConfigurationError';
+  }
+}
 
-export const createError = (
-  message: string,
-  code: ErrorCode,
-  metadata?: Record<string, any>
-): TraderError => {
-  return new TraderError(message, code, metadata);
-};
+export function logError(error: Error) {
+  const context = createLogContext();
+  if (error instanceof TradingError) {
+    logger.error(error.message, {
+      context,
+      code: error.code,
+      metadata: error.metadata,
+      stack: error.stack
+    });
+  } else {
+    logger.error(error.message, {
+      context,
+      stack: error.stack
+    });
+  }
+}

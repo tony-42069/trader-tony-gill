@@ -1,135 +1,93 @@
-import { Connection, Transaction, PublicKey, TransactionSignature, VersionedTransaction, AccountInfo, ParsedAccountData, TransactionResponse } from '@solana/web3.js';
-import { config } from '../../config/settings';
-import { logger, createLogContext } from '../logger';
-import {
-  SolanaClient,
-  ConnectionConfig,
-  HealthCheckResult,
-  SolanaError,
-  SolanaErrorCodes,
-  SolanaCommitment,
-  TokenAmount
+import { 
+  Connection, 
+  PublicKey, 
+  Transaction, 
+  TransactionSignature, 
+  AccountInfo, 
+  ParsedAccountData, 
+  TransactionResponse,
+  Commitment,
+  VersionedTransaction,
+  SendOptions,
+  Signer
+} from '@solana/web3.js';
+import { 
+  SolanaClient, 
+  ConnectionConfig, 
+  HealthCheckResult, 
+  TokenAmount, 
+  SolanaError, 
+  SolanaErrorCodes 
 } from './types';
 
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
-const DEFAULT_MAX_RETRIES = 3;
-
 export class SolanaClientImpl implements SolanaClient {
-  private rpcConnection: Connection;
-  private endpoint: string;
-  private commitment: SolanaCommitment;
-  private timeout: number;
-  private maxRetries: number;
-  private priorityFee: number;
+  private readonly rpcConnection: Connection;
+  private readonly endpoint: string;
+  private commitment: Commitment = 'confirmed';
+  private readonly timeout: number;
+  private readonly maxRetries: number;
+  private readonly priorityFee: number;
 
   constructor(config: ConnectionConfig) {
     this.endpoint = config.endpoint;
     this.commitment = config.commitment;
-    this.timeout = config.timeout || DEFAULT_TIMEOUT;
-    this.maxRetries = config.maxRetries || DEFAULT_MAX_RETRIES;
+    this.timeout = config.timeout || 30000;
+    this.maxRetries = config.maxRetries || 3;
     this.priorityFee = config.priorityFee || 0;
-
-    // Initialize direct connection instead of using Gill's createSolanaClient
     this.rpcConnection = new Connection(this.endpoint, {
       commitment: this.commitment,
       confirmTransactionInitialTimeout: this.timeout
     });
   }
 
-  async getLatestBlockhash() {
+  getConnection(): Connection {
+    return this.rpcConnection;
+  }
+
+  async getLatestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
     try {
-      const { blockhash, lastValidBlockHeight } = await this.rpcConnection.getLatestBlockhash({
-        commitment: this.commitment
-      });
-      return { blockhash, lastValidBlockHeight };
+      return await this.rpcConnection.getLatestBlockhash();
     } catch (error) {
       throw new SolanaError(
-        'Failed to get latest blockhash',
-        SolanaErrorCodes.BLOCKHASH_NOT_FOUND,
-        { error: error instanceof Error ? error.message : 'Unknown error' }
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get latest blockhash: ${error}`
       );
     }
   }
 
   async getBalance(publicKey: PublicKey): Promise<number> {
     try {
-      return await this.rpcConnection.getBalance(publicKey, {
-        commitment: this.commitment
-      });
+      return await this.rpcConnection.getBalance(publicKey);
     } catch (error) {
       throw new SolanaError(
-        'Failed to get balance',
-        SolanaErrorCodes.CONNECTION_FAILED,
-        { publicKey: publicKey.toString(), error: error instanceof Error ? error.message : 'Unknown error' }
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get balance: ${error}`
       );
     }
   }
 
   async sendAndConfirmTransaction(transaction: Transaction): Promise<TransactionSignature> {
-    const context = createLogContext();
-    const startTime = Date.now();
-
     try {
-      // Add priority fee if configured
-      if (this.priorityFee > 0) {
-        transaction.recentBlockhash = (await this.getLatestBlockhash()).blockhash;
-        transaction.feePayer = transaction.feePayer || transaction.signatures[0].publicKey;
-      }
-
-      // Convert legacy transaction to versioned transaction if needed
-      const versionedTx = transaction instanceof VersionedTransaction 
-        ? transaction 
-        : new VersionedTransaction(transaction.compileMessage());
-      
-      const signature = await this.rpcConnection.sendTransaction(versionedTx, {
-        maxRetries: this.maxRetries,
-        skipPreflight: false
-      });
-      
-      // Wait for confirmation
-      const confirmation = await this.rpcConnection.confirmTransaction({
-        signature,
-        blockhash: transaction.recentBlockhash!,
-        lastValidBlockHeight: (await this.getLatestBlockhash()).lastValidBlockHeight
-      }, this.commitment);
-
-      if (confirmation.value.err) {
-        throw new SolanaError(
-          'Transaction failed to confirm',
-          SolanaErrorCodes.TRANSACTION_FAILED,
-          { signature, error: confirmation.value.err }
-        );
-      }
-
-      const duration = Date.now() - startTime;
-      logger.info('Transaction confirmed', {
-        signature,
-        duration,
-        slot: confirmation.context.slot
-      });
-
-      return signature;
+      const options: SendOptions = {
+        preflightCommitment: this.commitment,
+        maxRetries: this.maxRetries
+      };
+      return await this.rpcConnection.sendTransaction(transaction, [], options);
     } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.error('Transaction failed', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        duration
-      });
-
       throw new SolanaError(
-        'Failed to send transaction',
         SolanaErrorCodes.TRANSACTION_FAILED,
-        { error: error instanceof Error ? error.message : 'Unknown error' }
+        `Transaction failed: ${error}`
       );
     }
   }
 
   async checkHealth(): Promise<HealthCheckResult> {
-    const startTime = Date.now();
     try {
-      const version = await this.rpcConnection.getVersion();
+      const start = Date.now();
       const slot = await this.rpcConnection.getSlot();
-      const latency = Date.now() - startTime;
+      const latency = Date.now() - start;
+
+      const version = await this.rpcConnection.getVersion();
 
       return {
         isHealthy: true,
@@ -138,86 +96,127 @@ export class SolanaClientImpl implements SolanaClient {
         version: version['solana-core']
       };
     } catch (error) {
-      const latency = Date.now() - startTime;
       return {
         isHealthy: false,
-        latency,
+        latency: 0,
         slot: 0,
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
 
-  withCommitment(commitment: SolanaCommitment): SolanaClient {
-    return new SolanaClientImpl({
-      endpoint: this.endpoint,
-      commitment,
-      timeout: this.timeout,
-      maxRetries: this.maxRetries,
-      priorityFee: this.priorityFee
-    });
+  withCommitment(commitment: Commitment): SolanaClient {
+    this.commitment = commitment;
+    return this;
   }
 
   async getAccountInfo(address: PublicKey): Promise<AccountInfo<Buffer> | null> {
-    return this.rpcConnection.getAccountInfo(address);
-  }
-
-  async getTokenLargestAccounts(mint: PublicKey): Promise<{ address: PublicKey; amount: TokenAmount }[]> {
-    const response = await this.rpcConnection.getTokenLargestAccounts(mint);
-    return response.value;
+    try {
+      return await this.rpcConnection.getAccountInfo(address);
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get account info: ${error}`
+      );
+    }
   }
 
   async getTokenSupply(mint: PublicKey): Promise<{ amount: number; decimals: number }> {
-    const response = await this.rpcConnection.getTokenSupply(mint);
-    return {
-      amount: Number(response.value.amount),
-      decimals: response.value.decimals
-    };
+    try {
+      const info = await this.rpcConnection.getTokenSupply(mint);
+      return {
+        amount: info.value.uiAmount || 0,
+        decimals: info.value.decimals
+      };
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get token supply: ${error}`
+      );
+    }
+  }
+
+  async getTokenLargestAccounts(mint: PublicKey): Promise<{ address: PublicKey; amount: TokenAmount }[]> {
+    try {
+      const accounts = await this.rpcConnection.getTokenLargestAccounts(mint);
+      return accounts.value.map(account => ({
+        address: account.address,
+        amount: {
+          amount: account.amount,
+          decimals: account.decimals,
+          uiAmount: account.uiAmount || 0,
+          uiAmountString: account.uiAmountString || '0'
+        }
+      }));
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get token largest accounts: ${error}`
+      );
+    }
   }
 
   async getRecentTransactions(address: PublicKey): Promise<TransactionResponse[]> {
-    const signatures = await this.rpcConnection.getSignaturesForAddress(address, {
-      limit: 100
-    });
-
-    const transactions = await Promise.all(
-      signatures.map(async sig => {
-        const tx = await this.rpcConnection.getTransaction(sig.signature);
-        return tx;
-      })
-    );
-
-    return transactions.filter((tx): tx is TransactionResponse => tx !== null);
+    try {
+      const signatures = await this.rpcConnection.getSignaturesForAddress(address, {
+        limit: 100
+      });
+      const txs = await Promise.all(
+        signatures.map(sig => this.rpcConnection.getTransaction(sig.signature))
+      );
+      return txs.filter((tx): tx is TransactionResponse => tx !== null);
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get recent transactions: ${error}`
+      );
+    }
   }
 
   async getTokenAccountsByOwner(owner: PublicKey): Promise<Array<{
     pubkey: PublicKey;
     account: AccountInfo<ParsedAccountData>;
   }>> {
-    const response = await this.rpcConnection.getParsedTokenAccountsByOwner(owner, {
-      programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-    });
-    return response.value;
+    try {
+      const accounts = await this.rpcConnection.getParsedTokenAccountsByOwner(owner, {
+        programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+      });
+      return accounts.value;
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.UNKNOWN,
+        `Failed to get token accounts: ${error}`
+      );
+    }
   }
 
   async sendTransaction(transaction: Transaction): Promise<string> {
-    const signature = await this.rpcConnection.sendRawTransaction(
-      transaction.serialize()
-    );
-    await this.rpcConnection.confirmTransaction(signature);
-    return signature;
+    try {
+      const options: SendOptions = {
+        preflightCommitment: this.commitment,
+        maxRetries: this.maxRetries
+      };
+      return await this.rpcConnection.sendTransaction(transaction, [], options);
+    } catch (error) {
+      throw new SolanaError(
+        SolanaErrorCodes.TRANSACTION_FAILED,
+        `Failed to send transaction: ${error}`
+      );
+    }
   }
 }
 
-// Create default client instance
-export const createDefaultSolanaClient = (
-  commitment: SolanaCommitment = 'confirmed'
-): SolanaClient => {
+export function createDefaultSolanaClient(config?: Partial<ConnectionConfig>): SolanaClient {
+  const defaultConfig: ConnectionConfig = {
+    endpoint: 'https://api.mainnet-beta.solana.com',
+    commitment: 'confirmed',
+    timeout: 30000,
+    maxRetries: 3,
+    priorityFee: 0
+  };
+
   return new SolanaClientImpl({
-    endpoint: config.solana.rpcUrl,
-    commitment,
-    timeout: DEFAULT_TIMEOUT,
-    maxRetries: DEFAULT_MAX_RETRIES,
-    priorityFee: config.trading.priorityFee
+    ...defaultConfig,
+    ...config
   });
-};
+}

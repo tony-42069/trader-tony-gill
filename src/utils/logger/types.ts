@@ -1,10 +1,10 @@
-export type LogLevel = 'error' | 'warn' | 'info' | 'trade' | 'snipe' | 'debug';
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
 export interface LogContext {
-  timestamp: string;
-  pid: number;
-  hostname: string;
+  service: string;
   environment: string;
+  requestId: string;
+  timestamp: string;
 }
 
 export interface PerformanceMetric {

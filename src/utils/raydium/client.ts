@@ -13,7 +13,8 @@ import {
   SwapResult, 
   RaydiumPoolConfig, 
   BigNumber,
-  RaydiumPoolState 
+  RaydiumPoolState,
+  PoolStateChange 
 } from './types';
 import { 
   createSwapInstruction, 
@@ -23,17 +24,21 @@ import {
 } from './instructions';
 
 export class RaydiumClient {
-  private pools: Map<string, RaydiumPool> = new Map();
+  protected pools: Map<string, RaydiumPool> = new Map();
 
   constructor(
-    private connection: Connection,
-    private programId: PublicKey
+    readonly connection: Connection,
+    readonly programId: PublicKey
   ) {}
 
   async createPool(config: RaydiumPoolConfig): Promise<RaydiumPool> {
     try {
       const poolId = new PublicKey(config.id);
-      const pool = new RaydiumPool(this.connection, poolId);
+      const pool = new RaydiumPool(
+        this.connection,
+        poolId,
+        (change: PoolStateChange) => console.log('Pool state change:', change)
+      );
       
       // Verify pool exists and is accessible
       await pool.fetchPoolState();
@@ -83,7 +88,7 @@ export class RaydiumClient {
         preflightCommitment: 'confirmed'
       });
 
-      return {
+      const result: SwapResult = {
         signature,
         amountIn: params.amountIn,
         amountOut,
@@ -91,13 +96,15 @@ export class RaydiumClient {
         fee,
         timestamp: Date.now()
       };
+
+      return result;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new RaydiumError(`Swap failed: ${message}`, 'SWAP_FAILED');
     }
   }
 
-  private calculateSwap(
+  calculateSwap(
     poolState: RaydiumPoolState,
     amountIn: BigNumber,
     isBaseInput: boolean
@@ -133,7 +140,7 @@ export class RaydiumClient {
     return { amountOut, priceImpact, fee };
   }
 
-  private calculatePriceImpact(
+  calculatePriceImpact(
     amountIn: BigNumber,
     amountOut: BigNumber,
     inputReserve: BigNumber,
@@ -157,7 +164,7 @@ export class RaydiumClient {
     return priceImpact;
   }
 
-  private async buildSwapTransaction(
+  async buildSwapTransaction(
     params: SwapParams,
     poolState: RaydiumPoolState
   ): Promise<VersionedTransaction> {
@@ -167,19 +174,19 @@ export class RaydiumClient {
 
       // Get token accounts
       const userSourceToken = await findAssociatedTokenAddress(
-        params.poolId,
-        poolState.baseMint
+        params.walletPublicKey,
+        params.isBaseInput ? poolState.baseMint : poolState.quoteMint
       );
       const userDestinationToken = await findAssociatedTokenAddress(
-        params.poolId,
-        poolState.quoteMint
+        params.walletPublicKey,
+        params.isBaseInput ? poolState.quoteMint : poolState.baseMint
       );
 
       // Build instruction accounts
       const accounts: SwapInstructionAccounts = {
         poolId: params.poolId,
-        tokenAccountA: poolState.baseMint,
-        tokenAccountB: poolState.quoteMint,
+        tokenAccountA: userSourceToken,
+        tokenAccountB: userDestinationToken,
         tokenPool: poolState.lpMint,
         authority,
         userSourceToken,
@@ -213,7 +220,7 @@ export class RaydiumClient {
     }
   }
 
-  getPool(poolId: string): RaydiumPool | undefined {
+  async getPool(poolId: string): Promise<RaydiumPool | undefined> {
     return this.pools.get(poolId);
   }
 

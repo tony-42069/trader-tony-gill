@@ -132,11 +132,13 @@ export class SniperCommands {
         const pnlStr = position.unrealizedPnl >= 0 ? '📈' : '📉';
         response.push(
           `\n${position.tokenSymbol} (${position.tokenAddress.slice(0, 8)}...)`,
-          `Entry: ${formatNumber(position.entryPrice)} SOL`,
-          `Current: ${formatNumber(position.currentPrice)} SOL`,
-          `PnL: ${pnlStr} ${formatNumber(position.unrealizedPnlPercent)}% (${formatNumber(position.unrealizedPnl)} SOL)`,
-          position.takeProfit ? `TP: ${formatNumber(position.takeProfit)} SOL` : undefined,
-          position.stopLoss ? `SL: ${formatNumber(position.stopLoss)} SOL` : undefined
+          `💰 Amount: ${formatNumber(position.amount)} SOL`,
+          `📈 Entry: ${formatNumber(position.entryPrice)} SOL`,
+          `📊 Current: ${formatNumber(position.currentPrice)} SOL`,
+          `💵 PnL: ${formatNumber(position.pnl)} SOL (${formatNumber(position.pnl / position.entryPrice * 100)}%)`,
+          position.takeProfit ? `TP: ${formatNumber(position.takeProfit)} SOL` : '❌ No Take Profit',
+          position.stopLoss ? `SL: ${formatNumber(position.stopLoss)} SOL` : '❌ No Stop Loss',
+          `⏰ Opened: ${position.createdAt.toLocaleString()}`
         );
       }
 

@@ -1,10 +1,11 @@
 import { LogContext } from './types';
+import { v4 as uuidv4 } from 'uuid';
 
 export function createLogContext(): LogContext {
   return {
-    timestamp: new Date().toISOString(),
-    pid: process.pid,
-    hostname: require('os').hostname(),
-    environment: process.env.NODE_ENV || 'development'
+    service: 'trader-tony',
+    environment: process.env.NODE_ENV || 'development',
+    requestId: uuidv4(),
+    timestamp: new Date().toISOString()
   };
 } 

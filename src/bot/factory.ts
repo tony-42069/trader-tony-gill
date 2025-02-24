@@ -58,6 +58,7 @@ export function createDefaultConfig(
   return {
     token,
     adminChatId,
+    network: process.env.NETWORK || 'mainnet-beta',
     defaultSlippage: 1.0, // 1%
     defaultMinLiquidity: 1.0, // 1 SOL
     maxRiskScore: 70,

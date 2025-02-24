@@ -1,9 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { RaydiumClient } from '../../utils/raydium/client';
-import { RaydiumPool } from '../../utils/raydium/pool';
+import { RaydiumClientInterface, RaydiumPool, RaydiumPoolState } from '../../utils/raydium/types';
 import { logger } from '../../utils/logger';
-import BN from 'bn.js';
-import { RaydiumPoolState } from '../../utils/raydium/types';
 
 export interface HoneypotAnalysis {
   isHoneypot: boolean;
@@ -21,7 +18,7 @@ export class HoneypotAnalyzer {
 
   constructor(
     private readonly connection: Connection,
-    private readonly raydiumClient: RaydiumClient
+    private readonly raydiumClient: RaydiumClientInterface
   ) {}
 
   async analyzeToken(tokenAddress: string): Promise<HoneypotAnalysis> {
@@ -45,7 +42,7 @@ export class HoneypotAnalyzer {
       }
 
       // Check liquidity
-      const liquidity = Number(poolState.baseReserve) / 1e9; // Convert lamports to SOL
+      const liquidity = Number(poolState.baseReserve.toString()) / 1e9; // Convert lamports to SOL
       if (liquidity < this.MIN_LIQUIDITY) {
         return {
           isHoneypot: true,
@@ -113,8 +110,8 @@ export class HoneypotAnalyzer {
       const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
       const expectedOut = this.calculateExpectedOutput(
         amountIn,
-        poolState.baseReserve,
-        poolState.quoteReserve
+        BigInt(poolState.baseReserve.toString()),
+        BigInt(poolState.quoteReserve.toString())
       );
 
       // Simulate transaction
@@ -123,7 +120,7 @@ export class HoneypotAnalyzer {
       return {
         success: true,
         tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.baseReserve) / 1e9 // Max buy amount in SOL
+        maxAmount: Number(poolState.baseReserve.toString()) / 1e9 // Max buy amount in SOL
       };
     } catch {
       return {
@@ -144,8 +141,8 @@ export class HoneypotAnalyzer {
       const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
       const expectedOut = this.calculateExpectedOutput(
         amountIn,
-        poolState.quoteReserve,
-        poolState.baseReserve
+        BigInt(poolState.quoteReserve.toString()),
+        BigInt(poolState.baseReserve.toString())
       );
 
       // Simulate transaction
@@ -154,7 +151,7 @@ export class HoneypotAnalyzer {
       return {
         success: true,
         tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.quoteReserve) / 1e9 // Max sell amount in tokens
+        maxAmount: Number(poolState.quoteReserve.toString()) / 1e9 // Max sell amount in tokens
       };
     } catch {
       return {

@@ -1,97 +1,25 @@
-import fs from 'fs';
-import path from 'path';
-import { config } from '../../config/settings';
 import { logger } from './logger';
-import { TraderError, errorCodes } from './errors';
-import type { LogContext } from './types';
-import winston from 'winston';
-import { LoggerConfig } from '../../config/types';
 import { createLogContext } from './context';
+import { TradingError } from './errors';
 
-export const initializeLogger = (): LogContext => {
+export function initializeLogger() {
   try {
-    // Ensure log directory exists
-    const logDirs = [
-      config.logger.logDirectory,
-      path.join(config.logger.logDirectory, 'trades'),
-      path.join(config.logger.logDirectory, 'errors'),
-      path.join(config.logger.logDirectory, 'performance')
-    ];
-
-    logDirs.forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-
-    // Create initial log context
     const context = createLogContext();
-
-    // Log initialization
-    context.log('info', 'Logger initialized', {
-      level: config.logger.logLevel,
-      performanceLogging: config.logger.enablePerformanceLogging,
-      logDirectory: config.logger.logDirectory,
-      subdirectories: logDirs.map(dir => path.basename(dir))
-    });
-
+    logger.info('Logger initialized', { context });
     return context;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    throw new TraderError(
-      `Failed to initialize logger: ${errorMessage}`,
-      errorCodes.INITIALIZATION_ERROR,
-      { error: errorMessage }
+    if (error instanceof TradingError) {
+      throw error;
+    }
+    throw new TradingError(
+      'Failed to initialize logger',
+      'INITIALIZATION_ERROR',
+      { originalError: error }
     );
   }
-};
+}
 
 // Cleanup function for graceful shutdown
-export const cleanupLogger = async (): Promise<void> => {
-  return new Promise((resolve) => {
-    logger.on('finish', resolve);
-    logger.end();
-  });
-};
-
-// Register cleanup handlers
-process.on('SIGTERM', async () => {
-  await cleanupLogger();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  await cleanupLogger();
-  process.exit(0);
-});
-
-export function initLogger(config: LoggerConfig): winston.Logger {
-  const context = createLogContext();
-  
-  const logger = winston.createLogger({
-    level: config.logLevel || 'info',
-    format: winston.format.combine(
-      winston.format.timestamp(),
-      winston.format.json()
-    ),
-    defaultMeta: { context },
-    transports: [
-      new winston.transports.File({
-        filename: config.errorLogName || 'error.log',
-        level: 'error'
-      }),
-      new winston.transports.File({
-        filename: config.tradeLogName || 'trades.log',
-        level: 'info'
-      })
-    ]
-  });
-
-  if (process.env.NODE_ENV !== 'production') {
-    logger.add(new winston.transports.Console({
-      format: winston.format.simple()
-    }));
-  }
-
-  return logger;
+export function cleanupLogger() {
+  logger.info('Logger cleanup initiated');
 }

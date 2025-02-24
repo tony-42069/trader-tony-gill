@@ -3,18 +3,45 @@ import { BN } from 'bn.js';
 import { RaydiumPoolState, PoolStateChange, PoolStatus, RaydiumError, BigNumber } from './types';
 
 export class RaydiumPool {
-  private lastState: RaydiumPoolState | null = null;
+  public readonly id: PublicKey;
+  private _baseMint: PublicKey | null = null;
+  private _quoteMint: PublicKey | null = null;
+  private _lpMint: PublicKey | null = null;
+  public state: RaydiumPoolState | null = null;
   private monitoringInterval: NodeJS.Timeout | null = null;
 
   constructor(
     private connection: Connection,
-    private poolId: PublicKey,
+    poolId: PublicKey,
     private onStateChange?: (change: PoolStateChange) => void
-  ) {}
+  ) {
+    this.id = poolId;
+  }
+
+  get baseMint(): PublicKey {
+    if (!this._baseMint) {
+      throw new RaydiumError('Pool not initialized', 'NOT_INITIALIZED');
+    }
+    return this._baseMint;
+  }
+
+  get quoteMint(): PublicKey {
+    if (!this._quoteMint) {
+      throw new RaydiumError('Pool not initialized', 'NOT_INITIALIZED');
+    }
+    return this._quoteMint;
+  }
+
+  get lpMint(): PublicKey {
+    if (!this._lpMint) {
+      throw new RaydiumError('Pool not initialized', 'NOT_INITIALIZED');
+    }
+    return this._lpMint;
+  }
 
   async fetchPoolState(): Promise<RaydiumPoolState> {
     try {
-      const accountInfo = await this.connection.getAccountInfo(this.poolId);
+      const accountInfo = await this.connection.getAccountInfo(this.id);
       
       if (!accountInfo) {
         throw new RaydiumError('Pool account not found', 'POOL_NOT_FOUND');
@@ -24,13 +51,20 @@ export class RaydiumPool {
       const data = accountInfo.data;
       const poolState = this.parsePoolData(data);
 
-      // Update last state and check for changes
-      if (this.lastState && this.onStateChange) {
-        const changes = this.calculateStateChanges(this.lastState, poolState);
+      // Update state and check for changes
+      if (this.state && this.onStateChange) {
+        const changes = this.calculateStateChanges(this.state, poolState);
         this.onStateChange(changes);
       }
 
-      this.lastState = poolState;
+      // Update instance properties if not already set
+      if (!this._baseMint) {
+        this._baseMint = poolState.baseMint;
+        this._quoteMint = poolState.quoteMint;
+        this._lpMint = poolState.lpMint;
+      }
+
+      this.state = poolState;
       return poolState;
     } catch (error: unknown) {
       if (error instanceof RaydiumError) {
@@ -93,18 +127,26 @@ export class RaydiumPool {
 
       const startTime = new BN(data.slice(offset, offset + 8), 'le');
 
+      // Calculate market data
+      const price = quoteReserve.toNumber() / baseReserve.toNumber();
+      
       return {
-        id: this.poolId,
         baseMint,
         quoteMint,
         lpMint,
-        baseDecimals,
-        quoteDecimals,
         baseReserve,
         quoteReserve,
         lpSupply,
-        startTime,
-        status
+        price,
+        volume24h: 0, // Would need external API for this
+        liquidity: quoteReserve.toNumber() * 2, // Simplified liquidity calc
+        lastUpdated: new Date(),
+        fees: {
+          tradeFee: 0.25, // 0.25% default Raydium fee
+          ownerTradeFee: 0,
+          ownerWithdrawFee: 0
+        },
+        status: status as PoolStatus
       };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -135,7 +177,7 @@ export class RaydiumPool {
     );
 
     return {
-      poolId: this.poolId.toString(),
+      poolId: this.id.toString(),
       baseReserveChange,
       quoteReserveChange,
       lpSupplyChange,
@@ -175,10 +217,14 @@ export class RaydiumPool {
   }
 
   isActive(): boolean {
-    return this.lastState?.status === PoolStatus.Active;
+    return this.state?.status === PoolStatus.Active;
   }
 
-  getLastState(): RaydiumPoolState | null {
-    return this.lastState;
+  async getReserves(): Promise<{ baseReserve: BigNumber; quoteReserve: BigNumber }> {
+    const state = await this.fetchPoolState();
+    return {
+      baseReserve: state.baseReserve,
+      quoteReserve: state.quoteReserve
+    };
   }
 }

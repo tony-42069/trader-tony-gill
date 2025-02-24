@@ -1,7 +1,5 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { RaydiumClient } from '../../utils/raydium/client';
-import { RaydiumPool } from '../../utils/raydium/pool';
-import { RaydiumPoolState } from '../../utils/raydium/types';
+import { RaydiumClientInterface, RaydiumPool, RaydiumPoolState } from '../../utils/raydium/types';
 import { logger } from '../../utils/logger';
 
 export interface TaxAnalysis {
@@ -18,7 +16,7 @@ export class TaxAnalyzer {
 
   constructor(
     private readonly connection: Connection,
-    private readonly raydiumClient: RaydiumClient
+    private readonly raydiumClient: RaydiumClientInterface
   ) {}
 
   async analyzeToken(tokenAddress: string): Promise<TaxAnalysis> {
@@ -87,11 +85,11 @@ export class TaxAnalyzer {
   }> {
     try {
       // Calculate expected output
-      const amountIn = BigInt(this.TEST_AMOUNT * 1e9); // Convert SOL to lamports
+      const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
       const expectedOut = this.calculateExpectedOutput(
         amountIn,
-        poolState.baseReserve,
-        poolState.quoteReserve
+        BigInt(poolState.baseReserve.toString()),
+        BigInt(poolState.quoteReserve.toString())
       );
 
       // Simulate transaction
@@ -100,7 +98,7 @@ export class TaxAnalyzer {
       return {
         success: true,
         tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.baseReserve) / 1e9 // Max buy amount in SOL
+        maxAmount: Number(poolState.baseReserve.toString()) / 1e9 // Max buy amount in SOL
       };
     } catch {
       return {
@@ -118,11 +116,11 @@ export class TaxAnalyzer {
   }> {
     try {
       // Calculate expected output
-      const amountIn = BigInt(this.TEST_AMOUNT * 1e9); // Convert SOL to lamports
+      const amountIn = BigInt(Math.floor(this.TEST_AMOUNT * 1e9)); // Convert SOL to lamports
       const expectedOut = this.calculateExpectedOutput(
         amountIn,
-        poolState.quoteReserve,
-        poolState.baseReserve
+        BigInt(poolState.quoteReserve.toString()),
+        BigInt(poolState.baseReserve.toString())
       );
 
       // Simulate transaction
@@ -131,7 +129,7 @@ export class TaxAnalyzer {
       return {
         success: true,
         tax: 0.01, // 1% tax
-        maxAmount: Number(poolState.quoteReserve) / 1e9 // Max sell amount in tokens
+        maxAmount: Number(poolState.quoteReserve.toString()) / 1e9 // Max sell amount in tokens
       };
     } catch {
       return {
@@ -174,4 +172,4 @@ export class TaxAnalyzer {
 
     return warnings;
   }
-} 
+}
